@@ -371,12 +371,11 @@ type EnvTable = HashMap<String, SExp>;
 
 #[derive(Debug)]
 struct EvalEnvironment {
-    arg_table: HashMap<String, SExp>,
-    met_table: HashMap<String, SExp>,
-    var_table: HashMap<String, SExp>,
-    loc_table: HashMap<String, SExp>,
+    arg_table: EnvTable,
+    met_table: EnvTable,
+    var_table: EnvTable,
+    loc_table: EnvTable,
 }
-
 
 impl EvalEnvironment {
     fn new() -> Self {
@@ -615,20 +614,23 @@ fn eval_func(id: &SExp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp
             let func = get_met(&mut env.met_table, met).clone();
             if let Some(args) = get_args(&mut env.arg_table, met) {
                 let args_exprs = args.get_list_vec(); // should be all ids
-                let args_vals = expr.get_list_vec();
-                if args_exprs.len() != args_vals.len() {
-                    panic!("ERROR: arguments len not match for {met}");
-                }
+                let (mut arg_f, mut rest_args_f) = expr.get_list_pair(); // FIX ME NEED TO BE EVALUATED
+                // if args_exprs.len() != args_vals.len() {
+                //     panic!("ERROR: arguments len not match for {met}");
+                // }
                 for i in 0..args_exprs.len() {
                     let id = args_exprs[i].get_id();
-                    let v = args_vals[i].clone();
+                    let v = eval_expr(arg_f, env);
+                    (arg_f, rest_args_f) = rest_args_f.get_list_pair();
+
                     put_local(&mut env.loc_table, id, &v);
                 }
                 println!("Local table: {lt:?}", lt = &env.loc_table);
             }
-            let (car, cdr) = func.get_list_pair();
-            pretty_print_list(&car, 0);
-            return eval_func(car, cdr, env, None);
+            pretty_print_list(&func, 0);
+            let result = eval_expr(&func, env);
+            env.loc_table.clear();
+            return result;
         }
         _ => {
             panic!("Unknown {id:?}");

@@ -1,5 +1,6 @@
 
 
-(define user "Murat")
-(define (say name) (println "Hi" name))
-(say user)
+(define (greet name) (println "Hello" name))
+
+
+(greet (incr 20))

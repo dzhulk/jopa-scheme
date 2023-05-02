@@ -1,3 +1,5 @@
-(define (say name lastname) (println (join "Hello, " name " " lastname)))
 
-(say "Murat" "Chlen")
+
+(define user "Murat")
+(define (say name) (println "Hi" name))
+(say user)

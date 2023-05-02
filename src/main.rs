@@ -73,7 +73,7 @@ impl<'a> Lexer<'a> {
                     self.next();
                 }
                 s if OPS.contains(&s) => {
-                    tokens.push(Token::Op(self.next().to_string()));
+                    tokens.push(Token::Op(self.chop_while(|ch| ch != ' ')));
                 }
                 '"' => {
                     self.next();
@@ -95,15 +95,15 @@ impl<'a> Lexer<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum EvOp {
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+enum EvMat {
     Add,
     Sub,
     Mul,
     Div,
 }
 
-impl EvOp {
+impl EvMat {
     fn from_string(s: &String) -> Option<Self> {
         match s.as_str() {
             "+" => Some(Self::Add),
@@ -113,14 +113,25 @@ impl EvOp {
             _   => None,
         }
     }
+
+    fn do_mat(&self, lhs: i32, rhs: i32) -> i32 {
+        match self {
+            Self::Add => lhs + rhs,
+            Self::Sub => lhs - rhs,
+            Self::Mul => lhs * rhs,
+            Self::Div => lhs / rhs,
+        }
+    }
 }
 
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum EvCmp {
     Lt,
     Gt,
-    Eq
+    Eq,
+    GtEq,
+    LtEq
 }
 
 impl EvCmp {
@@ -129,15 +140,27 @@ impl EvCmp {
             "<" => Some(Self::Lt),
             ">" => Some(Self::Gt),
             "=" => Some(Self::Eq),
+            ">=" => Some(Self::GtEq),
+            "<=" => Some(Self::LtEq),
             _   => None,
+        }
+    }
+
+    fn do_cmp<T>(&self, lhs: T, rhs: T) -> bool where T: PartialOrd + PartialEq {
+        match self {
+            Self::Eq => lhs == rhs,
+            Self::Lt => lhs < rhs,
+            Self::Gt => lhs > rhs,
+            Self::GtEq => lhs >= rhs,
+            Self::LtEq => lhs <= rhs,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum SExp {
     Id(String),
-    Op(EvOp),
+    Op(EvMat),
     Cmp(EvCmp),
     Sym(String),
     Num(i32),
@@ -155,11 +178,26 @@ impl SExp {
         };
     }
 
-    #[allow(dead_code)]
-    fn is_id(&self, val: &str) -> bool {
+    fn is_list(&self) -> bool {
         match self {
-            Self::Id(id) => *id == String::from(val),
+            Self::Cons {car, cdr}=> true,
             _ => false,
+        }
+    }
+
+    fn is_id(&self) -> bool {
+        match self {
+            Self::Id(_) => true,
+            _ => false,
+        }
+    }
+
+    fn get_id(&self) -> String {
+        match self {
+            Self::Id(id) => String::from(id),
+            _ => {
+                panic!("ERROR: cant't get id from {self:?}");
+            }
         }
     }
 
@@ -185,6 +223,17 @@ impl SExp {
         }
     }
 
+    fn get_list_vec(&self) -> Vec<&SExp> {
+        let mut c = self;
+        let mut res: Vec<&SExp> = Vec::new();
+        while c.is_list() {
+            let (car, cdr) = c.get_list_pair();
+            res.push(car);
+            c = cdr;
+        }
+        return res;
+    }
+
     fn get_list_pair(&self) -> (&SExp, &SExp) {
         match self {
             Self::Cons { car, cdr } => {
@@ -197,12 +246,42 @@ impl SExp {
         }
     }
 
-    fn get_num(&self) -> i32 {
+    fn as_string(&self) -> String {
         match self {
-            Self::Num(num) => *num,
+            Self::Num(num) => num.to_string(),
+            Self::Sym(str) => str.clone(),
+            Self::Nil => String::from(""),
+            Self::Bool(b) => if *b { String::from("true") } else { String::from("false") }
             _ => {
-                eprintln!("ERROR: expected Num type");
-                todo!();
+                panic!("ERROR: Not stringable type {self:?}");
+            }
+        }
+    }
+
+    fn cmp(&self, other: &SExp, cmp_op: &EvCmp) -> bool {
+        match (self, other) {
+            (Self::Num(lhs), Self::Num(rhs)) => cmp_op.do_cmp(lhs, rhs),
+            (Self::Sym(lhs), Self::Sym(rhs)) => cmp_op.do_cmp(lhs, rhs),
+            _ => {
+                eprintln!("ERROR: not comparable types: {self:?} and {other:?}");
+                todo!()
+            }
+        }
+    }
+
+    fn is_true(&self) -> bool {
+        match self {
+            Self::Bool(b) => *b,
+            _ => {
+                panic!("ERROR: Not boolean type {self:?}");
+            }
+        }
+    }
+
+    fn get_car(&self) -> &SExp {
+        match self {
+            _ => {
+                panic!("ERROR: Not boolean type {self:?}");
             }
         }
     }
@@ -220,7 +299,7 @@ fn parse_sexp(token: &Token) -> SExp {
         }
         Token::Str(str) => SExp::Sym(String::from(str)),
         Token::Op(str) => {
-            match EvOp::from_string(str) {
+            match EvMat::from_string(str) {
                 Some(op) => SExp::Op(op),
                 None => {
                     let cmp = EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
@@ -288,97 +367,295 @@ impl Parser {
     }
 }
 
+type EnvTable = HashMap<String, SExp>;
+
+#[derive(Debug)]
 struct EvalEnvironment {
-    met_table: HashMap<SExp, SExp>,
-    var_table: HashMap<SExp, SExp>,
+    arg_table: HashMap<String, SExp>,
+    met_table: HashMap<String, SExp>,
+    var_table: HashMap<String, SExp>,
+    loc_table: HashMap<String, SExp>,
 }
+
 
 impl EvalEnvironment {
     fn new() -> Self {
         return EvalEnvironment {
+            arg_table: HashMap::new(),
             met_table: HashMap::new(),
             var_table: HashMap::new(),
+            loc_table: HashMap::new(),
         };
+    }
+
+    fn has_var(&self, name: &str) -> bool {
+        self.var_table.contains_key(name)
+    }
+
+    fn has_loc(&self, name: &str) -> bool {
+        self.loc_table.contains_key(name)
+    }
+
+    fn has_met(&self, name: &str) -> bool {
+        self.met_table.contains_key(name)
+    }
+
+    fn get_var(&self, name: &str) -> &SExp {
+        self.var_table.get(name).unwrap()
+    }
+
+    fn get_loc(&self, name: &str) -> &SExp {
+        self.loc_table.get(name).unwrap()
+    }
+
+    fn get_args(&self, name: &str) -> Option<&SExp> {
+        self.arg_table.get(name)
+    }
+
+    fn get_met(&self, name: &str) -> &SExp {
+        self.met_table.get(name).unwrap()
+    }
+
+    fn put_local(&mut self, name: String, val: &SExp) {
+        self.loc_table.insert(name.to_string(), val.clone());
     }
 }
 
-fn eval_op(op: &EvOp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<i32>) -> SExp {
-    println!("acc: {acc:?}");
+fn put_local(loc_table: &mut EnvTable, name: String, val: &SExp) {
+    loc_table.insert(name.to_string(), val.clone());
+}
+
+fn get_args<'a>(arg_table: &'a mut EnvTable, name: &str) -> Option<&'a SExp> {
+    arg_table.get(name)
+}
+
+fn get_met<'a>(met_table: &'a mut EnvTable, name: &str) -> &'a SExp {
+    met_table.get(name).unwrap()
+}
+
+fn eval_mat(op: &EvMat, expr: &SExp, env: &mut EvalEnvironment, acc: Option<i32>) -> SExp {
+    if acc.is_none() {
+        // println!("Eval: {op:?} -> {expr:?}");
+    }
+
     match expr {
         SExp::Nil => SExp::Num(acc.unwrap()),
         _ => {
             let (n_car, n_cdr) = expr.get_list_pair();
-            let SExp::Num(lhs_res) = eval_expr(n_car, env) else { todo!() };
-            let new_acc = match op {
-                EvOp::Add => acc.map(|a| a + lhs_res).or_else(|| Some(lhs_res)),
-                EvOp::Sub => acc.map(|a| a - lhs_res).or_else(|| Some(lhs_res)),
-                EvOp::Mul => acc.map(|a| a * lhs_res).or_else(|| Some(lhs_res)),
-                EvOp::Div => acc.map(|a| a / lhs_res).or_else(|| Some(lhs_res)),
-            };
-            eval_op(op, n_cdr, env, new_acc)
+            let SExp::Num(lhs) = eval_expr(n_car, env) else { panic!("Math on not Num type!") };
+            let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
+            eval_mat(op, n_cdr, env, new_acc)
         }
     }
 }
 
-fn eval_cmp_2(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
-    println!("acc: {acc:?}");
+fn eval_cmp(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
+    if acc.is_none() {
+        // println!("Eval: {op:?} -> {expr:?}");
+    }
+
     match expr {
         SExp::Nil => SExp::Bool(true),
         _ => {
             let (n_car, n_cdr) = expr.get_list_pair();
-             match eval_expr(n_car, env) {
-                SExp::Num(n) => {
-                    match acc {
-                        Some(acc_exp ) if acc_exp.get_num() < n => {
-                            SExp::Bool(false)
-                        },
-                        _ => {
-                            eval_cmp_2(op, n_cdr, env, Some(SExp::Num(n)))
-                        },
+            let lhs = eval_expr(n_car, env);
+            let next_acc = match acc {
+                Some(a) =>
+                    if a.cmp(&lhs, op) {
+                        lhs
+                    } else {
+                        return SExp::Bool(false)
                     }
-                },
-                _ => {
-                    todo!("Only nums cmp");
-                }
-            }
+                None => lhs
+            };
+            return eval_cmp(op, n_cdr, env, Some(next_acc));
         }
     }
 }
 
-// fn eval_cmp(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: bool) -> SExp {
-//     println!("acc: {acc:?}");
-//     match expr {
-//         SExp::Nil => SExp::Bool(acc),
-//         _ => {
-//             let (n_car, n_cdr) = expr.get_list_pair();
-//             let SExp::Num(lhs_res) = eval_expr(n_car, env) else { todo!() };
-//             let new_acc = match op {
-//                 EvCmp::Gt => acc.map(|a| a > lhs_res).or_else(|| Some(lhs_res)),
-//                 _ => SExp::Nil
-//             };
-//             eval_op(op, n_cdr, env, new_acc)
-//         }
-//     }
-// }
+fn eval_func(id: &SExp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
+    match id.get_id().as_str() {
+        "if" => {
+            match expr {
+                SExp::Nil => {
+                    return acc.unwrap();
+                },
+                SExp::Cons { car, cdr } => {
+                    let cond_res = eval_expr(car, env);
+                    let (true_branch, false_branch) = cdr.get_list_pair();
+                    if cond_res.is_true() {
+                        return eval_expr(true_branch, env);
+                    } else {
+                        let (false_branch, _) = false_branch.get_list_pair();
+                        return eval_expr(false_branch, env);
+                    }
+                },
+                _ => {
+                    panic!("Error in if cond {expr:?}");
+                }
+            };
+        },
+        "or"  => {
+            match expr {
+                SExp::Nil => {
+                    return SExp::Bool(false)
+                },
+                SExp::Cons { car, cdr } => {
+                    let lhs = eval_expr(car, env);
+                    let new_acc = match acc {
+                        Some(_) =>
+                            if lhs.is_true() {
+                                return SExp::Bool(true)
+                            } else {
+                                lhs
+                            }
+                        None => lhs
+                    };
+                    return eval_func(id, cdr, env, Some(new_acc));
+                },
+                _ => {
+                    panic!("Not joinable {expr:?}");
+                }
+            };
+        }
+        "and" => {
+            match expr {
+                SExp::Nil => {
+                    return acc.unwrap();
+                },
+                SExp::Cons { car, cdr } => {
+                    let lhs = eval_expr(car, env);
+                    let new_acc = match acc {
+                        Some(a) =>
+                            if a.is_true() && lhs.is_true() {
+                                lhs
+                            } else {
+                                return SExp::Bool(false)
+                            }
+                        None => lhs
+                    };
+                    return eval_func(id, cdr, env, Some(new_acc));
+                },
+                _ => {
+                    panic!("Not joinable {expr:?}");
+                }
+            };
+        }
+        "join" => {
+            match expr {
+                SExp::Nil => {
+                    let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
+                    return SExp::Sym(output)
+                },
+                SExp::Cons { car, cdr } => {
+                    let lhs = eval_expr(car, env);
+                    let str = lhs.as_string();
+                    let new_acc = acc.map(|a| {
+                        SExp::Sym(a.as_string() + " " + &str)
+                    }).or(Some(SExp::Sym(str)));
+                    return eval_func(id, cdr, env, new_acc);
+                },
+                _ => {
+                    panic!("Not joinable {expr:?}");
+                }
+            };
+        },
+        "println" => {
+            match expr {
+                SExp::Nil => {
+                    let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
+                    println!("{output}");
+                    return SExp::Nil;
+                },
+                SExp::Cons { car, cdr } => {
+                    let mut lhs = eval_expr(car, env);
+                    while lhs.is_id() {
+                        lhs = eval_expr(&lhs, env);
+                    }
+                    println!("lhs: {lhs:?}");
+                    let str = lhs.as_string();
+                    let new_acc = acc.map(|a| {
+                        SExp::Sym(a.as_string() + " " + &str)
+                    }).or(Some(SExp::Sym(str)));
+                    return eval_func(id, cdr, env, new_acc);
+                },
+                _ => {
+                    panic!("Not printable {expr:?}");
+                }
+            };
+        },
+        "define" => {
+            match expr {
+                SExp::Cons { car, cdr } if car.is_id() => {
+                    let (n_cdr, _) = cdr.get_list_pair();
+                    let var = eval_expr(n_cdr, env);
+                    env.var_table.insert(car.get_id(), var);
+                    return SExp::Nil;
+                },
+                SExp::Cons { car, cdr } if car.is_list() => {
+                    let (name, args) = car.get_list_pair();
+                    env.arg_table.insert(name.get_id(), args.clone());
+                    let (body, _) = cdr.get_list_pair();
+                    env.met_table.insert(name.get_id(), body.clone());
+                    return SExp::Nil;
+                },
+                _ => {
+                    panic!("ERROR: invalid define {expr:?}");
+                }
+            }
+        },
+        var if env.has_var(var) => {
+            return env.get_var(var).clone();
+        }
+        var if env.has_loc(var) => {
+            return env.get_loc(var).clone();
+        }
+        met if env.has_met(met) => {
+            println!("Got the mthod call");
+            let func = get_met(&mut env.met_table, met).clone();
+            if let Some(args) = get_args(&mut env.arg_table, met) {
+                let args_exprs = args.get_list_vec(); // should be all ids
+                let args_vals = expr.get_list_vec();
+                if args_exprs.len() != args_vals.len() {
+                    panic!("ERROR: arguments len not match for {met}");
+                }
+                for i in 0..args_exprs.len() {
+                    let id = args_exprs[i].get_id();
+                    let v = args_vals[i].clone();
+                    put_local(&mut env.loc_table, id, &v);
+                }
+                println!("Local table: {lt:?}", lt = &env.loc_table);
+            }
+            let (car, cdr) = func.get_list_pair();
+            pretty_print_list(&car, 0);
+            return eval_func(car, cdr, env, None);
+        }
+        _ => {
+            panic!("Unknown {id:?}");
+        }
+    };
+}
+
 
 fn eval_expr(expr: &SExp, env: &mut EvalEnvironment) -> SExp {
+    pretty_print_list(expr, 0);
     match expr {
         SExp::Cons { car, cdr } => {
             match car.as_ref() {
-                SExp::Op(s)=> { eval_op(s, cdr, env, None) },
-                SExp::Cmp(s)=> { eval_cmp_2(s, cdr, env, None) },
-                SExp::Num(num) => {
-                    // println!("found num: {num}");
-                    SExp::Num(*num)
-                },
+                SExp::Id(_)=> { eval_func(car, cdr, env, None) },
+                SExp::Op(s)=> { eval_mat(s, cdr, env, None) },
+                SExp::Cmp(s)=> { eval_cmp(s, cdr, env, None) },
+                SExp::Num(num) => SExp::Num(num.clone()),
+                SExp::Sym(sym) => SExp::Sym(sym.clone()),
+                SExp::Bool(b) => SExp::Bool(b.clone()),
                 _ => { SExp::Nil }
             }
         },
-        SExp::Num(num) => {
-            // println!("found num: {num}");
-            SExp::Num(*num)
-        },
-        _ => { SExp::Nil},
+        SExp::Id(id) => eval_func(expr, &SExp::Nil, env, None),
+        SExp::Num(num) => SExp::Num(num.clone()),
+        SExp::Sym(sym) => SExp::Sym(sym.clone()),
+        SExp::Bool(b) => SExp::Bool(b.clone()),
+        _ => { SExp::Nil },
     }
 }
 
@@ -399,14 +676,15 @@ fn main() {
     let mut parser = Parser::new(tokens);
     parser.parse_tokens();
 
-    let mut env = EvalEnvironment { met_table: HashMap::new(), var_table: HashMap::new() };
+    let mut env = EvalEnvironment::new();
 
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
         println!("\n-> {expr:?}\n");
-        pretty_print_list(expr, 0);
+        // pretty_print_list(expr, 0);
         let result = eval_expr(expr, &mut env);
         println!("Result: {result:?}");
+        println!("ENV: {env:?}");
     }
 }
 

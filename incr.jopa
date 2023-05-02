@@ -1,1 +1,11 @@
-(define (fib n) (if (< n 3) 1 (+ (fib (- n 1)) (fib (- n 2)))))
+# (define (fib n) (if (< n 3) 1 (+ (fib (- n 1)) (fib (- n 2)))))
+
+# (println (fib 10))
+
+# (println "name" name)
+# (println "name" (name))
+
+(+ 2 3 (- 10 5))
+(- 8 1 1 1)
+(* 12 12 12)
+(> 12 13 3)

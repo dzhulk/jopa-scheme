@@ -1,7 +1,6 @@
-extern crate rustyline;
+mod exp;
 
 use std::collections::HashMap;
-
 use std::cmp::{Eq, PartialEq};
 use std::fs;
 
@@ -38,8 +37,7 @@ impl<'a> Lexer<'a> {
         return chr;
     }
 
-    fn chop_while(&mut self, f: impl Fn(char) -> bool) -> String
-    {
+    fn chop_while(&mut self, f: impl Fn(char) -> bool) -> String {
         let mut result: Vec<char> = Vec::new();
         while let Some(nxt) = self.peek() {
             if f(nxt) {
@@ -53,37 +51,42 @@ impl<'a> Lexer<'a> {
 
     fn parse(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
-        while let Some(_) = self.peek() {
-            match self.peek() {
-                Some('(') => {
+        while let Some(sym) = self.peek() {
+            match sym {
+                '(' => {
                     self.next();
                     tokens.push(Token::LPar);
                 }
-                Some(')') => {
+                ')' => {
                     self.next();
                     tokens.push(Token::RPar);
                 }
-                Some(s) if s.is_alphabetic() => {
+                s if s.is_alphabetic() => {
                     let token = self.chop_while(|c| c.is_alphanumeric());
                     tokens.push(Token::Sym(token))
                 }
-                Some(s) if s.is_numeric() => {
+                s if s.is_numeric() => {
                     let token = self.chop_while(|c| c.is_numeric());
                     tokens.push(Token::Num(token));
                 }
-                Some(s) if SKIP_SYMS.contains(&s) => {
+                s if SKIP_SYMS.contains(&s) => {
                     self.next();
                 }
-                Some(s) if OPS.contains(&s) => {
+                s if OPS.contains(&s) => {
                     tokens.push(Token::Op(self.next().to_string()));
                 }
-                Some('"') => {
+                '"' => {
                     self.next();
                     tokens.push(Token::Str(self.chop_while(|ch| ch != '"')));
                     self.next();
-                }
+                },
+                '#' => {
+                    self.next();
+                    self.chop_while(|ch| ch != '\n');
+                    self.next();
+                },
                 any => {
-                    println!("Unknown {any:?}");
+                    println!("Unknown {any}");
                     todo!();
                 }
             };
@@ -93,10 +96,52 @@ impl<'a> Lexer<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+enum EvOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl EvOp {
+    fn from_string(s: &String) -> Option<Self> {
+        match s.as_str() {
+            "+" => Some(Self::Add),
+            "-" => Some(Self::Sub),
+            "*" => Some(Self::Mul),
+            "/" => Some(Self::Div),
+            _   => None,
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq, Eq)]
+enum EvCmp {
+    Lt,
+    Gt,
+    Eq
+}
+
+impl EvCmp {
+    fn from_string(s: &String) -> Option<Self> {
+        match s.as_str() {
+            "<" => Some(Self::Lt),
+            ">" => Some(Self::Gt),
+            "=" => Some(Self::Eq),
+            _   => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum SExp {
     Id(String),
+    Op(EvOp),
+    Cmp(EvCmp),
     Sym(String),
     Num(i32),
+    Bool(bool),
     Quote,
     Cons { car: Box<SExp>, cdr: Box<SExp> },
     Nil,
@@ -110,6 +155,7 @@ impl SExp {
         };
     }
 
+    #[allow(dead_code)]
     fn is_id(&self, val: &str) -> bool {
         match self {
             Self::Id(id) => *id == String::from(val),
@@ -121,13 +167,9 @@ impl SExp {
         match self {
             Self::Cons { car, cdr } => {
                 if *cdr == SExp::Nil {
-                    let new_list = Self::Cons {
-                        car: Box::new(other),
-                        cdr: Box::new(SExp::Nil),
-                    };
                     Self::Cons {
                         car: car,
-                        cdr: Box::new(new_list),
+                        cdr: Box::new(Self::new_list(other)),
                     }
                 } else {
                     Self::Cons {
@@ -137,7 +179,29 @@ impl SExp {
                 }
             }
             _ => {
-                eprintln!("ERROR: append to not list type");
+                eprintln!("ERROR: append expected list type");
+                todo!();
+            }
+        }
+    }
+
+    fn get_list_pair(&self) -> (&SExp, &SExp) {
+        match self {
+            Self::Cons { car, cdr } => {
+                (car, cdr)
+            },
+            _ => {
+                eprintln!("ERROR: expected list type");
+                todo!();
+            }
+        }
+    }
+
+    fn get_num(&self) -> i32 {
+        match self {
+            Self::Num(num) => *num,
+            _ => {
+                eprintln!("ERROR: expected Num type");
                 todo!();
             }
         }
@@ -147,14 +211,23 @@ impl SExp {
 fn parse_sexp(token: &Token) -> SExp {
     match token {
         Token::Sym(str) => {
-            if str == "quote" {
-                SExp::Quote
-            } else {
-                SExp::Id(String::from(str))
+            match str.as_str() {
+                "quote" => SExp::Quote,
+                "true"  => SExp::Bool(true),
+                "false"  => SExp::Bool(false),
+                _ => SExp::Id(String::from(str)),
             }
         }
         Token::Str(str) => SExp::Sym(String::from(str)),
-        Token::Op(str) => SExp::Id(String::from(str)),
+        Token::Op(str) => {
+            match EvOp::from_string(str) {
+                Some(op) => SExp::Op(op),
+                None => {
+                    let cmp = EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
+                    SExp::Cmp(cmp)
+                }
+            }
+        },
         Token::Num(str) => SExp::Num(String::from(str).parse::<i32>().unwrap()),
         any => {
             eprintln!("ERROR: Unknown token: {any:?}");
@@ -229,37 +302,131 @@ impl EvalEnvironment {
     }
 }
 
-// fn eval_expr(expr: SExp, env: &mut EvalEnvironment) -> SExp {
+fn eval_op(op: &EvOp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<i32>) -> SExp {
+    println!("acc: {acc:?}");
+    match expr {
+        SExp::Nil => SExp::Num(acc.unwrap()),
+        _ => {
+            let (n_car, n_cdr) = expr.get_list_pair();
+            let SExp::Num(lhs_res) = eval_expr(n_car, env) else { todo!() };
+            let new_acc = match op {
+                EvOp::Add => acc.map(|a| a + lhs_res).or_else(|| Some(lhs_res)),
+                EvOp::Sub => acc.map(|a| a - lhs_res).or_else(|| Some(lhs_res)),
+                EvOp::Mul => acc.map(|a| a * lhs_res).or_else(|| Some(lhs_res)),
+                EvOp::Div => acc.map(|a| a / lhs_res).or_else(|| Some(lhs_res)),
+            };
+            eval_op(op, n_cdr, env, new_acc)
+        }
+    }
+}
+
+fn eval_cmp_2(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
+    println!("acc: {acc:?}");
+    match expr {
+        SExp::Nil => SExp::Bool(true),
+        _ => {
+            let (n_car, n_cdr) = expr.get_list_pair();
+             match eval_expr(n_car, env) {
+                SExp::Num(n) => {
+                    match acc {
+                        Some(acc_exp ) if acc_exp.get_num() < n => {
+                            SExp::Bool(false)
+                        },
+                        _ => {
+                            eval_cmp_2(op, n_cdr, env, Some(SExp::Num(n)))
+                        },
+                    }
+                },
+                _ => {
+                    todo!("Only nums cmp");
+                }
+            }
+        }
+    }
+}
+
+// fn eval_cmp(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: bool) -> SExp {
+//     println!("acc: {acc:?}");
 //     match expr {
-//         SExp::Cons { car, cdr } if car.is_id("define") => {}
-//         _ => {}
+//         SExp::Nil => SExp::Bool(acc),
+//         _ => {
+//             let (n_car, n_cdr) = expr.get_list_pair();
+//             let SExp::Num(lhs_res) = eval_expr(n_car, env) else { todo!() };
+//             let new_acc = match op {
+//                 EvCmp::Gt => acc.map(|a| a > lhs_res).or_else(|| Some(lhs_res)),
+//                 _ => SExp::Nil
+//             };
+//             eval_op(op, n_cdr, env, new_acc)
+//         }
 //     }
 // }
 
+fn eval_expr(expr: &SExp, env: &mut EvalEnvironment) -> SExp {
+    match expr {
+        SExp::Cons { car, cdr } => {
+            match car.as_ref() {
+                SExp::Op(s)=> { eval_op(s, cdr, env, None) },
+                SExp::Cmp(s)=> { eval_cmp_2(s, cdr, env, None) },
+                SExp::Num(num) => {
+                    // println!("found num: {num}");
+                    SExp::Num(*num)
+                },
+                _ => { SExp::Nil }
+            }
+        },
+        SExp::Num(num) => {
+            // println!("found num: {num}");
+            SExp::Num(*num)
+        },
+        _ => { SExp::Nil},
+    }
+}
+
+
 fn main() {
     let args = std::env::args();
-
     let arguments = args.collect::<Vec<_>>();
 
     let file_path = &arguments[1];
-    println!("Reading {file_path}");
+    println!("Reading '{file_path}'");
     let content = fs::read_to_string(file_path).expect("Cant read file content");
+    println!("Source:\n--------\n{content}\n----------", content = content.trim());
     let chars = content.chars().into_iter().collect::<Vec<_>>();
     let mut lexer = Lexer { input: &chars };
     let tokens = lexer.parse();
-    println!("Token: #{tokens:?}");
+    println!("Tokens: #{tokens:?}");
+    println!("------------");
     let mut parser = Parser::new(tokens);
     parser.parse_tokens();
-    println!("Parser: {parser:?}");
+
+    let mut env = EvalEnvironment { met_table: HashMap::new(), var_table: HashMap::new() };
+
+    println!("Expressions:");
+    for expr in parser.sexprs.iter() {
+        println!("\n-> {expr:?}\n");
+        pretty_print_list(expr, 0);
+        let result = eval_expr(expr, &mut env);
+        println!("Result: {result:?}");
+    }
+}
 
 
+fn pretty_print_list(list: &SExp, level: usize) {
+    let cis = std::iter::repeat("    ").take(level).collect::<String>();
+    match list {
+        SExp::Cons { car, cdr } => {
+            println!("{cis}Cons: {{");
+            pretty_print_list(car, level+1);
+            pretty_print_list(cdr, level+1);
+            println!("{cis}}}");
+        },
+        any => {
+            println!("{cis}{any:?}");
+        }
 
-    // let s1 = SExp::Id("some 32".to_string());
-    // let s2 = SExp::Id("some 32".to_string());
+    }
 
-    // if s1 == s2 {
-    //     println!("EQUAL!");
-    // }
+    ()
 }
 
 /*

@@ -1,0 +1,76 @@
+
+
+(define (say name lastname) (println (join "Hello, " name (upper "name))))
+
+[
+    LPAR,
+        SYM("define"),
+        LPAR,
+            SYM("say"), SYM("name"), SYM("lastname"),
+        RPAR,
+        LPAR,
+            SYM("println"),
+            LPAR,
+                SYM("join"), STR("Hello, "), SYM("name"),
+            RPAR,
+        RPAR,
+    RPAR
+]
+
+        Cons(join, Cons(Hello, Cons(name, Nil)))
+    Cons(println, Nil)
+    Cons(say, Cons(name, Cons(lastname, nil))) <- sp
+Cons(define, nil) <- sp
+
+Cons(
+    ID(define),
+    Cons(
+        Cons(
+            ID(say),
+            Cons(ID(name), Nil)
+        ),
+        Cons(
+            ID(println),
+            Cons(
+                ID(join),
+                Cons(
+                    Sym("Hello, "),
+                    Cons(ID(name), Nil)
+                )
+            )
+        )
+    )
+)
+
+
+
+Cons(join, Cons("Hello, ", Cons(name, nil))) - -1
+Cons(println, nil) .  - -1
+Cons(say, Cons(name, Cons(lastname, nil))) -1
+Cons(define, nil)
+
+
+(Cons {
+    car: Id("define"),
+    cdr: Cons {
+        car: Id("say"),
+        cdr: Cons {
+            car: Id("name"),
+            cdr: Nil
+        }
+    }
+}, [LPAR, SYM("println"), LPAR, SYM("join"), STR("Hello, "), SYM("name"), RPAR, RPAR, RPAR])
+
+(define (incr arg) (+ arg 1))
+
+
+(if (= a b) (println "it is true") (println "it is a lie!"))
+
+Cons(
+    ID(if),
+    Cons(
+        Cons(
+
+        )
+    )
+)

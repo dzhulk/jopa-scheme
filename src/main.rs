@@ -442,7 +442,15 @@ impl Parser {
 type EnvTable = HashMap<String, SExp>;
 #[derive(Debug)]
 struct LocalEnv {
-    loc_table: EnvTable,
+    loc_env: EnvTable,
+}
+
+impl LocalEnv {
+    fn new() -> Self {
+        return LocalEnv {
+            loc_env: HashMap::new()
+        };
+    }
 }
 
 
@@ -487,7 +495,7 @@ impl EvalEnvironment {
         self.met_table.get(name).unwrap()
     }
 
-    fn eval_lambda(&mut self, lambda_id: i32, expr: &SExp, loc_table: &mut EnvTable) ->SExp {
+    fn eval_lambda(&mut self, lambda_id: i32, expr: &SExp, loc_env: &mut EnvTable) ->SExp {
         // generate random uuid on parsing state
         // transform lambda to regular meth to local table
         // return it as new SExp::Id() with random uuid
@@ -499,23 +507,23 @@ impl EvalEnvironment {
     }
 
 
-    fn eval_expr(&mut self, expr: &SExp, loc_table: &mut EnvTable) -> SExp {
+    fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
         // pretty_print_list(expr, 0);
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
-                SExp::Id(_) => self.eval_func(car, cdr, None, loc_table),
-                SExp::Op(s) => self.eval_mat(s, cdr, None, loc_table),
-                SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_table),
+                SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
+                SExp::Op(s) => self.eval_mat(s, cdr, None, loc_env),
+                SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_env),
                 SExp::Num(num) => SExp::Num(*num),
                 SExp::Sym(sym) => SExp::Sym(sym.to_string()),
                 SExp::Bool(b) => SExp::Bool(*b),
-                // SExp::Lambda(id) => self.eval_lambda(*id, cdr, loc_table),
+                // SExp::Lambda(id) => self.eval_lambda(*id, cdr, loc_env),
                 SExp::Nil => SExp::Nil,
                 _ => {
                     panic!("ERROR: can't match eval expr car: {car:?}");
                 }
             },
-            SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_table),
+            SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_env),
             SExp::Num(num) => SExp::Num(*num),
             SExp::Sym(sym) => SExp::Sym(sym.to_string()),
             SExp::Bool(b) => SExp::Bool(*b),
@@ -531,14 +539,14 @@ impl EvalEnvironment {
         op: &EvMat,
         expr: &SExp,
         acc: Option<i32>,
-        loc_table: &mut EnvTable,
+        loc_env: &mut LocalEnv,
     ) -> SExp {
         match expr {
             SExp::Nil => SExp::Num(acc.unwrap()),
             _ => {
-                let SExp::Num(lhs) = self.eval_expr(expr.get_car(), loc_table) else { panic!("Math on not Num type!") };
+                let SExp::Num(lhs) = self.eval_expr(expr.get_car(), loc_env) else { panic!("Math on not Num type!") };
                 let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
-                self.eval_mat(op, expr.get_cdr(), new_acc, loc_table)
+                self.eval_mat(op, expr.get_cdr(), new_acc, loc_env)
             }
         }
     }
@@ -547,7 +555,7 @@ impl EvalEnvironment {
         op: &EvCmp,
         expr: &SExp,
         acc: Option<SExp>,
-        loc_table: &mut EnvTable,
+        loc_env: &mut LocalEnv,
     ) -> SExp {
         if acc.is_none() {
             // println!("Eval: {op:?} -> {expr:?}");
@@ -556,7 +564,7 @@ impl EvalEnvironment {
         match expr {
             SExp::Nil => SExp::Bool(true),
             _ => {
-                let lhs = self.eval_expr(expr.get_car(), loc_table);
+                let lhs = self.eval_expr(expr.get_car(), loc_env);
                 let next_acc = match acc {
                     Some(a) => {
                         if a.cmp(&lhs, op) {
@@ -567,7 +575,7 @@ impl EvalEnvironment {
                     }
                     None => lhs,
                 };
-                return self.eval_cmp(op, expr.get_cdr(), Some(next_acc), loc_table);
+                return self.eval_cmp(op, expr.get_cdr(), Some(next_acc), loc_env);
             }
         }
     }
@@ -577,7 +585,7 @@ impl EvalEnvironment {
         id: &SExp,
         expr: &SExp,
         acc: Option<SExp>,
-        loc_table: &mut EnvTable,
+        loc_env: &mut LocalEnv,
     ) -> SExp {
         // println!("Evaling exp {expr:?}");
         match id.get_id().as_str() {
@@ -585,11 +593,11 @@ impl EvalEnvironment {
                 match expr {
                     SExp::Nil => return acc.unwrap(),
                     SExp::Cons { car, cdr } => {
-                        let res = self.eval_expr(car, loc_table);
+                        let res = self.eval_expr(car, loc_env);
                         let new_acc = acc
                             .map(|a| a.append_to_list(res.clone()))
                             .or(Some(SExp::new_list(res)));
-                        return self.eval_func(id, cdr, new_acc, loc_table);
+                        return self.eval_func(id, cdr, new_acc, loc_env);
                     }
                     _ => {
                         panic!("Can't parse 'do' {expr:?}");
@@ -600,8 +608,8 @@ impl EvalEnvironment {
                 match expr {
                     SExp::Nil => return acc.unwrap(),
                     SExp::Cons { car, cdr } => {
-                        let res = self.eval_expr(car, loc_table);
-                        return self.eval_func(id, cdr, Some(res), loc_table);
+                        let res = self.eval_expr(car, loc_env);
+                        return self.eval_func(id, cdr, Some(res), loc_env);
                     }
                     _ => {
                         panic!("Can't parse 'do' {expr:?}");
@@ -614,15 +622,15 @@ impl EvalEnvironment {
                         return acc.unwrap();
                     }
                     SExp::Cons { car, cdr } => {
-                        let cond_res = self.eval_expr(car, loc_table);
+                        let cond_res = self.eval_expr(car, loc_env);
                         let (true_branch, false_branch) = cdr.get_list_pair();
                         if cond_res.is_true() {
-                            return self.eval_expr(true_branch, loc_table);
+                            return self.eval_expr(true_branch, loc_env);
                         } else {
                             match false_branch {
                                 SExp::Nil => return SExp::Nil,
                                 _ => {
-                                    return self.eval_expr(false_branch.get_car(), loc_table);
+                                    return self.eval_expr(false_branch.get_car(), loc_env);
                                 }
                             }
                         }
@@ -636,7 +644,7 @@ impl EvalEnvironment {
                 match expr {
                     SExp::Nil => return SExp::Bool(false),
                     SExp::Cons { car, cdr } => {
-                        let lhs = self.eval_expr(car, loc_table);
+                        let lhs = self.eval_expr(car, loc_env);
                         let new_acc = match acc {
                             Some(_) => {
                                 if lhs.is_true() {
@@ -647,7 +655,7 @@ impl EvalEnvironment {
                             }
                             None => lhs,
                         };
-                        return self.eval_func(id, cdr, Some(new_acc), loc_table);
+                        return self.eval_func(id, cdr, Some(new_acc), loc_env);
                     }
                     _ => {
                         panic!("Not joinable {expr:?}");
@@ -660,7 +668,7 @@ impl EvalEnvironment {
                         return acc.unwrap();
                     }
                     SExp::Cons { car, cdr } => {
-                        let lhs = self.eval_expr(car, loc_table);
+                        let lhs = self.eval_expr(car, loc_env);
                         let new_acc = match acc {
                             Some(a) => {
                                 if a.is_true() && lhs.is_true() {
@@ -671,7 +679,7 @@ impl EvalEnvironment {
                             }
                             None => lhs,
                         };
-                        return self.eval_func(id, cdr, Some(new_acc), loc_table);
+                        return self.eval_func(id, cdr, Some(new_acc), loc_env);
                     }
                     _ => {
                         panic!("Not joinable {expr:?}");
@@ -684,10 +692,10 @@ impl EvalEnvironment {
                         panic!("Nil takes 1 arg")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         if lhs.is_nil() {
                             return SExp::Bool(true);
@@ -706,10 +714,10 @@ impl EvalEnvironment {
                         panic!("CDR from empty list")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         if lhs.is_list() && !lhs.is_nil() {
                             return lhs.get_cdr().clone();
@@ -728,9 +736,9 @@ impl EvalEnvironment {
                         panic!("list? expects 1 argument")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         return SExp::Bool(lhs.is_list() || lhs.is_nil());
                     }
@@ -745,9 +753,9 @@ impl EvalEnvironment {
                         panic!("LENGTH expects 1 argument")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         if lhs.is_list() || lhs.is_nil() {
                             return SExp::Num(lhs.get_list_vec().len() as i32);
@@ -766,10 +774,10 @@ impl EvalEnvironment {
                         panic!("Car from empty list")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         if lhs.is_list() && !lhs.is_nil() {
                             return lhs.get_car().clone();
@@ -791,10 +799,10 @@ impl EvalEnvironment {
                             panic!("Cons takes only 2 arguments: {expr:?}");
                         }
 
-                        let first = self.eval_expr(car, loc_table);
+                        let first = self.eval_expr(car, loc_env);
                         // we know there are only two args, so seconds
                         // only should have car
-                        let second = self.eval_expr(cdr.get_car(), loc_table);
+                        let second = self.eval_expr(cdr.get_car(), loc_env);
                         if second.is_list() || second.is_nil() {
                             return second.prepend_to_list(first);
                         } else {
@@ -816,12 +824,12 @@ impl EvalEnvironment {
                         return SExp::Sym(output);
                     }
                     SExp::Cons { car, cdr } => {
-                        let lhs = self.eval_expr(car, loc_table);
+                        let lhs = self.eval_expr(car, loc_env);
                         let str = lhs.as_string();
                         let new_acc = acc
                             .map(|a| SExp::Sym(a.as_string() + " " + &str))
                             .or(Some(SExp::Sym(str)));
-                        return self.eval_func(id, cdr, new_acc, loc_table);
+                        return self.eval_func(id, cdr, new_acc, loc_env);
                     }
                     _ => {
                         panic!("Not joinable {expr:?}");
@@ -839,15 +847,15 @@ impl EvalEnvironment {
                         return SExp::Nil;
                     }
                     SExp::Cons { car, cdr } => {
-                        let mut lhs = self.eval_expr(car, loc_table);
+                        let mut lhs = self.eval_expr(car, loc_env);
                         while lhs.is_id() {
-                            lhs = self.eval_expr(&lhs, loc_table);
+                            lhs = self.eval_expr(&lhs, loc_env);
                         }
                         let str = lhs.as_string();
                         let new_acc = acc
                             .map(|a| SExp::Sym(a.as_string() + " " + &str))
                             .or(Some(SExp::Sym(str)));
-                        return self.eval_func(id, cdr, new_acc, loc_table);
+                        return self.eval_func(id, cdr, new_acc, loc_env);
                     }
                     _ => {
                         panic!("Not printable {expr:?}");
@@ -856,7 +864,7 @@ impl EvalEnvironment {
             }
             "define" => match expr {
                 SExp::Cons { car, cdr } if car.is_id() => {
-                    let var = self.eval_expr(cdr.get_car(), loc_table);
+                    let var = self.eval_expr(cdr.get_car(), loc_env);
                     self.var_table.insert(car.get_id(), var);
                     return SExp::Nil;
                 }
@@ -874,12 +882,12 @@ impl EvalEnvironment {
             var if self.has_var(var) => {
                 return self.get_var(var).clone();
             }
-            var if loc_table.contains_key(var) => {
-                return loc_table.get(var).unwrap().clone();
+            var if loc_env.loc_env.contains_key(var) => {
+                return loc_env.loc_env.get(var).unwrap().clone();
             }
             met if self.has_met(met) => {
                 let func = self.get_met(met).clone();
-                let mut new_loc_table = EvalEnvironment::new_env_table();
+                let mut new_loc_env = LocalEnv::new();
                 if let Some(args) = self.get_args(met) {
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter = args_exprs.into_iter();
@@ -889,9 +897,9 @@ impl EvalEnvironment {
                         match args_iter.next() {
                             Some(arg_name) if expr_p.is_list() => {
                                 let call_arg = expr_p.get_car();
-                                let arg_val = self.eval_expr(call_arg, loc_table);
+                                let arg_val = self.eval_expr(call_arg, loc_env);
                                 // println!("Arg {arg_name:?} -> {val:?}", arg_name=arg_name.get_id(), val=arg_val);
-                                new_loc_table.insert(arg_name.get_id(), arg_val);
+                                new_loc_env.loc_env.insert(arg_name.get_id(), arg_val);
                                 expr_p = expr_p.get_cdr();
                             }
                             None if expr_p.is_nil() => {
@@ -904,9 +912,9 @@ impl EvalEnvironment {
                     }
                 }
                 // pretty_print_list(&func, 0);
-                // println!("Exec func '{met}  with locals {loc_table:?}");
-                let result = self.eval_expr(&func, &mut new_loc_table);
-                // println!("Exec func '{met}' with locals {loc_table:?} -> ret {result:?}");
+                // println!("Exec func '{met}  with locals {loc_env:?}");
+                let result = self.eval_expr(&func, &mut new_loc_env);
+                // println!("Exec func '{met}' with locals {loc_env:?} -> ret {result:?}");
                 return result;
             }
             _ => {
@@ -940,8 +948,8 @@ fn main() {
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
         println!("\n-> {expr:?}\n");
-        let mut loc_table: EnvTable = EvalEnvironment::new_env_table();
-        let result = env.eval_expr(expr, &mut loc_table);
+        let mut loc_env: LocalEnv = LocalEnv::new();
+        let result = env.eval_expr(expr, &mut loc_env);
         println!("Result: {result:?}");
         // println!("ENV: {env:?}");
     }

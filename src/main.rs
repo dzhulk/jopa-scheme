@@ -824,20 +824,18 @@ impl EvalEnvironment {
                 if let Some(args) = self.get_args(met) {
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter  = args_exprs.into_iter();
-                    let (mut arg_f, mut rest_args_f) = expr.get_list_pair();
+                    let mut expr_p = expr;
+                    // println!("Args {expr:?}");
                     loop {
-                        let arg_name_opt = args_iter.next();
-                        match (arg_name_opt, arg_f) {
-                            (Some(arg_name), _) => {
-                                let arg_val = self.eval_expr(arg_f, loc_table);
+                        match (args_iter.next()) {
+                            Some(arg_name) if expr_p.is_list() => {
+                                let call_arg = expr_p.get_car();
+                                let arg_val = self.eval_expr(call_arg, loc_table);
+                                // println!("Arg {arg_name:?} -> {val:?}", arg_name=arg_name.get_id(), val=arg_val);
                                 new_loc_table.insert(arg_name.get_id(), arg_val);
-                                if rest_args_f.is_list() {
-                                    (arg_f, rest_args_f) = rest_args_f.get_list_pair();
-                                } else {
-                                    arg_f = &SExp::Nil;
-                                }
+                                expr_p = expr_p.get_cdr();
                             },
-                            (None, SExp::Nil) => {
+                            None if expr_p.is_nil() => {
                                 break;
                             },
                             _ => {
@@ -847,7 +845,6 @@ impl EvalEnvironment {
 
                     }
                 }
-                // FIXME: error due to local table clearing
                 // pretty_print_list(&func, 0);
                 // println!("Exec func '{met}  with locals {loc_table:?}");
                 let result = self.eval_expr(&func, &mut new_loc_table);

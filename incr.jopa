@@ -1,4 +1,5 @@
 # (define (fib n) (if (< n 3) 1 (+ (fib (- n 1)) (fib (- n 2)))))
+# o
 
 # (println (fib 10))
 
@@ -16,3 +17,12 @@
 #(<= 1 1 1 2)
 
 (if (= "tert" "test") (println "it is true") (println "it is a lie"))
+
+(do (println "foo") (println "bar" "baz") (join 1 2 3))
+
+
+(define (loop f t)
+    (if (< f t) 
+        (loop (+ f 1) t)))
+
+(loop 1 10)

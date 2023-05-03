@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::cmp::{Eq, PartialEq};
 use std::fs;
 
-const SKIP_SYMS: [char; 4] = ['\n', '\r', ' ', '\t'];
-const OPS: [char; 7] = ['+', '-', '=', '*', '/', '>', '<'];
+const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', ';'];
+const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
 
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
@@ -101,6 +101,7 @@ enum EvMat {
     Sub,
     Mul,
     Div,
+    Mod,
 }
 
 impl EvMat {
@@ -110,6 +111,7 @@ impl EvMat {
             "-" => Some(Self::Sub),
             "*" => Some(Self::Mul),
             "/" => Some(Self::Div),
+            "%" => Some(Self::Mod),
             _   => None,
         }
     }
@@ -120,6 +122,7 @@ impl EvMat {
             Self::Sub => lhs - rhs,
             Self::Mul => lhs * rhs,
             Self::Div => lhs / rhs,
+            Self::Mod => lhs % rhs,
         }
     }
 }
@@ -188,6 +191,13 @@ impl SExp {
     fn is_id(&self) -> bool {
         match self {
             Self::Id(_) => true,
+            _ => false,
+        }
+    }
+
+    fn is_nil(&self) -> bool {
+        match self {
+            Self::Nil => true,
             _ => false,
         }
     }
@@ -427,7 +437,7 @@ impl EvalEnvironment {
                     _ => { SExp::Nil }
                 }
             },
-            SExp::Id(id) => self.eval_func(expr, &SExp::Nil, None, loc_table),
+            SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_table),
             SExp::Num(num) => SExp::Num(num.clone()),
             SExp::Sym(sym) => SExp::Sym(sym.clone()),
             SExp::Bool(b) => SExp::Bool(b.clone()),
@@ -473,7 +483,20 @@ impl EvalEnvironment {
 
 
     fn eval_func(&mut self, id: &SExp, expr: &SExp, acc: Option<SExp>, loc_table: &mut EnvTable) -> SExp {
+        // println!("Evaling exp {expr:?}");
         match id.get_id().as_str() {
+            "do" => {
+                match expr {
+                    SExp::Nil => { return acc.unwrap() },
+                    SExp::Cons { car, cdr } => {
+                        let res = self.eval_expr(car, loc_table);
+                        return self.eval_func(id, cdr, Some(res), loc_table);
+                    },
+                    _ => {
+                        panic!("Can't parse 'do' {expr:?}");
+                    }
+                };
+            },
             "if" => {
                 match expr {
                     SExp::Nil => {
@@ -485,8 +508,15 @@ impl EvalEnvironment {
                         if cond_res.is_true() {
                             return self.eval_expr(true_branch, loc_table);
                         } else {
-                            let (false_branch, _) = false_branch.get_list_pair();
-                            return self.eval_expr(false_branch, loc_table);
+                            match false_branch {
+                                SExp::Nil => {
+                                    return SExp::Nil
+                                },
+                                _ => {
+                                    let (false_branch, _) = false_branch.get_list_pair();
+                                    return self.eval_expr(false_branch, loc_table);
+                                }
+                            }
                         }
                     },
                     _ => {

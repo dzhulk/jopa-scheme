@@ -266,6 +266,9 @@ impl SExp {
             Self::Sym(str) => str.clone(),
             Self::Nil => String::from(""),
             Self::Bool(b) => if *b { String::from("true") } else { String::from("false") }
+            lst if lst.is_list() => {
+                return lst.get_list_vec().iter().map(|l| l.as_string()).collect::<Vec<_>>().join(" ");
+            },
             _ => {
                 panic!("ERROR: Not stringable type {self:?}");
             }
@@ -485,6 +488,19 @@ impl EvalEnvironment {
     fn eval_func(&mut self, id: &SExp, expr: &SExp, acc: Option<SExp>, loc_table: &mut EnvTable) -> SExp {
         // println!("Evaling exp {expr:?}");
         match id.get_id().as_str() {
+            "list" => {
+                match expr {
+                    SExp::Nil => { return acc.unwrap() },
+                    SExp::Cons { car, cdr } => {
+                        let res = self.eval_expr(car, loc_table);
+                        let new_acc = acc.map(|a| a.append_to_list(res.clone())).or(Some(SExp::new_list(res)));
+                        return self.eval_func(id, cdr, new_acc, loc_table);
+                    },
+                    _ => {
+                        panic!("Can't parse 'do' {expr:?}");
+                    }
+                };
+            }
             "do" => {
                 match expr {
                     SExp::Nil => { return acc.unwrap() },
@@ -570,7 +586,29 @@ impl EvalEnvironment {
                     }
                 };
             }
-            "join" => {
+            "cons" => {
+                match expr {
+                    SExp::Nil => { return acc.unwrap() },
+                    SExp::Cons { car, cdr } => {
+                        if acc.is_none() {
+                            let res = self.eval_expr(car, loc_table);
+                            if res.is_list() {
+                                return self.eval_func(id, cdr, Some(res), loc_table);
+                            } else {
+                                panic!("Cons arg should be list: {expr:?}");
+                            }
+                        } else {
+                            let res = self.eval_expr(car, loc_table);
+                            let new_acc = acc.map(|a| a.append_to_list(res.clone()));
+                            return self.eval_func(id, cdr, new_acc, loc_table);
+                        }
+                    },
+                    _ => {
+                        panic!("Can't parse 'cons' {expr:?}");
+                    }
+                };
+            },
+            "concat" => {
                 match expr {
                     SExp::Nil => {
                         let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
@@ -644,9 +682,9 @@ impl EvalEnvironment {
                 if let Some(args) = self.get_args(met) {
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter  = args_exprs.into_iter();
-                    let (mut arg_f, mut rest_args_f) = expr.get_list_pair(); 
+                    let (mut arg_f, mut rest_args_f) = expr.get_list_pair();
                     loop {
-                        let arg_name_opt = args_iter.next(); 
+                        let arg_name_opt = args_iter.next();
                         match (arg_name_opt, arg_f) {
                             (Some(_), SExp::Nil) => {
                                 panic!("ERROR: not enuogh args for {met}")
@@ -660,7 +698,7 @@ impl EvalEnvironment {
                                     arg_f = &SExp::Nil;
                                 }
                             },
-                            (None, SExp::Nil) => { 
+                            (None, SExp::Nil) => {
                                 break;
                             },
                             _ => {

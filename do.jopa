@@ -1,11 +1,12 @@
-
-
-(do (println "foo") (println "bar" "baz") (join 1 2 3))
+(do
+    (println "foo")
+    (println "bar" "baz")
+    (join 1 2 3))
 
 
 (define (loop f t)
     (if (< f t)
-        (do 
+        (do
             (println f)
             (loop (+ f 1) t))))
 

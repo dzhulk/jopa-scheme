@@ -1,6 +1,3 @@
-# (define (fib n) (if (< n 3) 1 (+ (fib (- n 1)) (fib (- n 2)))))
-# o
-
 # (println (fib 10))
 
 # (println "name" name)
@@ -22,7 +19,7 @@
 
 
 (define (loop f t)
-    (if (< f t) 
+    (if (< f t)
         (loop (+ f 1) t)))
 
 (loop 1 10)

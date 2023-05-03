@@ -499,10 +499,9 @@ impl EvalEnvironment {
         match expr {
             SExp::Nil => SExp::Num(acc.unwrap()),
             _ => {
-                let (n_car, n_cdr) = expr.get_list_pair();
-                let SExp::Num(lhs) = self.eval_expr(n_car, loc_table) else { panic!("Math on not Num type!") };
+                let SExp::Num(lhs) = self.eval_expr(expr.get_car(), loc_table) else { panic!("Math on not Num type!") };
                 let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
-                self.eval_mat(op, n_cdr, new_acc, loc_table)
+                self.eval_mat(op, expr.get_cdr(), new_acc, loc_table)
             }
         }
     }
@@ -520,8 +519,7 @@ impl EvalEnvironment {
         match expr {
             SExp::Nil => SExp::Bool(true),
             _ => {
-                let (n_car, n_cdr) = expr.get_list_pair();
-                let lhs = self.eval_expr(n_car, loc_table);
+                let lhs = self.eval_expr(expr.get_car(), loc_table);
                 let next_acc = match acc {
                     Some(a) => {
                         if a.cmp(&lhs, op) {
@@ -532,7 +530,7 @@ impl EvalEnvironment {
                     }
                     None => lhs,
                 };
-                return self.eval_cmp(op, n_cdr, Some(next_acc), loc_table);
+                return self.eval_cmp(op, expr.get_cdr(), Some(next_acc), loc_table);
             }
         }
     }
@@ -587,8 +585,7 @@ impl EvalEnvironment {
                             match false_branch {
                                 SExp::Nil => return SExp::Nil,
                                 _ => {
-                                    let (false_branch, _) = false_branch.get_list_pair();
-                                    return self.eval_expr(false_branch, loc_table);
+                                    return self.eval_expr(false_branch.get_car(), loc_table);
                                 }
                             }
                         }
@@ -828,15 +825,14 @@ impl EvalEnvironment {
             }
             "define" => match expr {
                 SExp::Cons { car, cdr } if car.is_id() => {
-                    let (n_cdr, _) = cdr.get_list_pair();
-                    let var = self.eval_expr(n_cdr, loc_table);
+                    let var = self.eval_expr(cdr.get_car(), loc_table);
                     self.var_table.insert(car.get_id(), var);
                     return SExp::Nil;
                 }
                 SExp::Cons { car, cdr } if car.is_list() => {
                     let (name, args) = car.get_list_pair();
                     self.arg_table.insert(name.get_id(), args.clone());
-                    let (body, _) = cdr.get_list_pair();
+                    let body = cdr.get_car();
                     self.met_table.insert(name.get_id(), body.clone());
                     return SExp::Nil;
                 }

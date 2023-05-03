@@ -1,7 +1,3 @@
-(define mylist (list 1 2 3 (+ 2 2)))
-
-(println (cons mylist 100))
-
 (define (fizzbuzzaux n curr acc)
     (if (< curr n)
         (fizzbuzzaux n (+ curr 1)
@@ -11,32 +7,11 @@
                     (cons "Fizz" acc)
                     (if (= (% curr 5) 0)
                         (cons "Buzz" acc)
-                        (cons curr acc))))
-            )
-        acc));
+                        (cons curr acc)))))
+        acc))
 
 (define (fizzbuzz n)
-    (fizzbuzzaux (+ n 1) 1 nil));
-
-
-
-(car (list 4 3 2 1))
-
-
-
-(car mylist)
-
-(define foo (do
-    (println "hello from foo")
-    (list 11 12 13)))
-
-(println foo)
-
-(define (iseven n) (if (= (% n 2) 0) (concat n "is even") (concat n "is odd")))
-
-(println (iseven 10))
-
-(cdr (list 1))
+    (fizzbuzzaux (+ n 1) 1 nil))
 
 (define (append list1 list2)
         (if (isnil list1) list2
@@ -44,11 +19,13 @@
 
 (define (reverse l)
   (if (isnil l)
-     nil
-     (append (reverse (cdr l)) (list (car l)))
+    nil
+    (append (reverse (cdr l)) (list (car l)))
   )
 )
 
 (println (reverse (list 1 2 3 4 5)))
 
 (println (reverse (fizzbuzz 100)))
+
+

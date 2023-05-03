@@ -6,6 +6,7 @@
 
 (define (pow2 n) (* n n));
 
+
 (println "Fib 14 is" (fib 14));
 
 (println "16^2 is" (pow2 16));

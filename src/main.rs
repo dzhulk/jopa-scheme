@@ -211,6 +211,13 @@ impl SExp {
         }
     }
 
+    fn prepend_to_list(self, other: SExp) -> SExp {
+        if self.is_list() || self.is_nil() {
+            return Self::Cons { car: Box::new(other), cdr: Box::new(self) }
+        }
+        panic!("ERROR: cant prepted to not list type {self:?}");
+    }
+
     fn append_to_list(self, other: SExp) -> SExp {
         match self {
             Self::Cons { car, cdr } => {
@@ -225,7 +232,10 @@ impl SExp {
                         cdr: Box::new(cdr.append_to_list(other)),
                     }
                 }
-            }
+            },
+            Self::Nil => {
+                Self::new_list(other)
+            },
             _ => {
                 eprintln!("ERROR: append expected list type");
                 todo!();
@@ -235,6 +245,11 @@ impl SExp {
 
     fn get_list_vec(&self) -> Vec<SExp> {
         let mut res: Vec<SExp> = Vec::new();
+
+        if self.is_nil() {
+            return res;
+        }
+
         loop {
             let (mut car, mut cdr) = self.get_list_pair();
             res.push(car.clone());
@@ -246,6 +261,30 @@ impl SExp {
         }
 
         return res;
+    }
+
+    fn get_cdr(&self) -> &SExp {
+        match self {
+            Self::Cons { car: _, cdr } => {
+                cdr
+            },
+            _ => {
+                eprintln!("ERROR: expected list type");
+                todo!();
+            }
+        }
+    }
+
+    fn get_car(&self) -> &SExp {
+        match self {
+            Self::Cons { car, cdr: _ } => {
+                car
+            },
+            _ => {
+                eprintln!("ERROR: expected list type");
+                todo!();
+            }
+        }
     }
 
     fn get_list_pair(&self) -> (&SExp, &SExp) {
@@ -264,10 +303,12 @@ impl SExp {
         match self {
             Self::Num(num) => num.to_string(),
             Self::Sym(str) => str.clone(),
-            Self::Nil => String::from(""),
+            Self::Nil => String::from("()"),
             Self::Bool(b) => if *b { String::from("true") } else { String::from("false") }
             lst if lst.is_list() => {
-                return lst.get_list_vec().iter().map(|l| l.as_string()).collect::<Vec<_>>().join(" ");
+                return String::from("(") +
+                    lst.get_list_vec().iter().map(|l| l.as_string()).collect::<Vec<_>>().join(" ").as_str() +
+                    String::from(")").as_str();
             },
             _ => {
                 panic!("ERROR: Not stringable type {self:?}");
@@ -294,14 +335,6 @@ impl SExp {
             }
         }
     }
-
-    fn get_car(&self) -> &SExp {
-        match self {
-            _ => {
-                panic!("ERROR: Not boolean type {self:?}");
-            }
-        }
-    }
 }
 
 fn parse_sexp(token: &Token) -> SExp {
@@ -309,6 +342,7 @@ fn parse_sexp(token: &Token) -> SExp {
         Token::Sym(str) => {
             match str.as_str() {
                 "quote" => SExp::Quote,
+                "nil" => SExp::Nil,
                 "true"  => SExp::Bool(true),
                 "false"  => SExp::Bool(false),
                 _ => SExp::Id(String::from(str)),
@@ -437,14 +471,20 @@ impl EvalEnvironment {
                     SExp::Num(num) => SExp::Num(num.clone()),
                     SExp::Sym(sym) => SExp::Sym(sym.clone()),
                     SExp::Bool(b) => SExp::Bool(b.clone()),
-                    _ => { SExp::Nil }
+                    SExp::Nil => SExp::Nil,
+                    _ => {
+                        panic!("ERROR: can't match eval expr car: {car:?}");
+                    }
                 }
             },
             SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_table),
             SExp::Num(num) => SExp::Num(num.clone()),
             SExp::Sym(sym) => SExp::Sym(sym.clone()),
             SExp::Bool(b) => SExp::Bool(b.clone()),
-            _ => { SExp::Nil },
+            SExp::Nil => SExp::Nil,
+            _ => {
+                panic!("ERROR: can't match eval expr: {expr:?}");
+            }
         }
     }
 
@@ -585,22 +625,90 @@ impl EvalEnvironment {
                         panic!("Not joinable {expr:?}");
                     }
                 };
-            }
+            },
+            "isnil" => {
+                match expr {
+                    SExp::Nil => { panic!("Nil takes 1 arg") },
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        // println!("lhs: {lhs:?}");
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        if lhs.is_nil() {
+                            return SExp::Bool(true);
+                        } else {
+                            return SExp::Bool(false);
+                        }
+                    },
+                    _ => {
+                        panic!("Can't parse 'isnil' {expr:?}");
+                    }
+                };
+            },
+            "cdr" => {
+                match expr {
+                    SExp::Nil => { panic!("CDR from empty list") },
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        // println!("lhs: {lhs:?}");
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        if lhs.is_list() && !lhs.is_nil() {
+                            return lhs.get_cdr().clone();
+                        } else {
+                            panic!("CDR works only on lists {expr:?}");
+                        }
+                    },
+                    _ => {
+                        panic!("Can't parse 'cdr' {expr:?}");
+                    }
+                };
+            },
+            "car" => {
+                match expr {
+                    SExp::Nil => { panic!("Car from empty list") },
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        // println!("lhs: {lhs:?}");
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        if lhs.is_list() && !lhs.is_nil() {
+                            return lhs.get_car().clone();
+                        } else {
+                            panic!("Car works only on lists {expr:?}");
+                        }
+                    },
+                    _ => {
+                        panic!("Can't parse 'car' {expr:?}");
+                    }
+                };
+            },
             "cons" => {
                 match expr {
                     SExp::Nil => { return acc.unwrap() },
                     SExp::Cons { car, cdr } => {
-                        if acc.is_none() {
-                            let res = self.eval_expr(car, loc_table);
-                            if res.is_list() {
-                                return self.eval_func(id, cdr, Some(res), loc_table);
-                            } else {
-                                panic!("Cons arg should be list: {expr:?}");
-                            }
+                        // println!("Len: {len}", len=);
+                        let len = expr.get_list_vec().len();
+                        if len > 2 {
+                            panic!("Cons takes only 2 arguments: {expr:?}");
+                        }
+
+                        // println!("cdr: {cdr:?}");
+                        let first = self.eval_expr(car, loc_table);
+                        // we know there are only two args, so seconds
+                        // only should have car
+                        let second = self.eval_expr(cdr.get_car(), loc_table);
+
+                        // println!("first {first:?}");
+                        // println!("second {second:?}");
+
+                        if second.is_list() || second.is_nil() {
+                            return second.prepend_to_list(first);
                         } else {
-                            let res = self.eval_expr(car, loc_table);
-                            let new_acc = acc.map(|a| a.append_to_list(res.clone()));
-                            return self.eval_func(id, cdr, new_acc, loc_table);
+                            return SExp::new_list(second).prepend_to_list(first);
                         }
                     },
                     _ => {
@@ -686,9 +794,6 @@ impl EvalEnvironment {
                     loop {
                         let arg_name_opt = args_iter.next();
                         match (arg_name_opt, arg_f) {
-                            (Some(_), SExp::Nil) => {
-                                panic!("ERROR: not enuogh args for {met}")
-                            },
                             (Some(arg_name), _) => {
                                 let arg_val = self.eval_expr(arg_f, loc_table);
                                 new_loc_table.insert(arg_name.get_id(), arg_val);

@@ -1,7 +1,7 @@
 (do
     (println "foo")
     (println "bar" "baz")
-    (join 1 2 3))
+    (concat 1 2 3))
 
 
 (define (loop f t)
@@ -11,3 +11,4 @@
             (loop (+ f 1) t))))
 
 (loop 1 10)
+

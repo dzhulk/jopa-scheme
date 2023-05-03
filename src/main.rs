@@ -5,7 +5,7 @@ use std::fs;
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', ';'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq,Clone)]
 enum Token {
     LPar,
     RPar,
@@ -162,6 +162,7 @@ impl EvCmp {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum SExp {
+    Lambda(i32),
     Id(String),
     Op(EvMat),
     Cmp(EvCmp),
@@ -198,6 +199,13 @@ impl SExp {
     fn is_nil(&self) -> bool {
         match self {
             Self::Nil => true,
+            _ => false,
+        }
+    }
+
+    fn is_lambda(&self) -> bool {
+        match self {
+            Self::Lambda(_) => true,
             _ => false,
         }
     }
@@ -344,35 +352,13 @@ impl SExp {
     }
 }
 
-fn parse_sexp(token: &Token) -> SExp {
-    match token {
-        Token::Sym(str) => match str.as_str() {
-            "quote" => SExp::Quote,
-            "nil" => SExp::Nil,
-            "true" => SExp::Bool(true),
-            "false" => SExp::Bool(false),
-            _ => SExp::Id(String::from(str)),
-        },
-        Token::Str(str) => SExp::Sym(String::from(str)),
-        Token::Op(str) => match EvMat::from_string(str) {
-            Some(op) => SExp::Op(op),
-            None => {
-                let cmp = EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
-                SExp::Cmp(cmp)
-            }
-        },
-        Token::Num(str) => SExp::Num(String::from(str).parse::<i32>().unwrap()),
-        any => {
-            eprintln!("ERROR: Unknown token: {any:?}");
-            todo!();
-        }
-    }
-}
+
 
 #[derive(Debug)]
 struct Parser {
     tokens: Vec<Token>,
     sexprs: Vec<SExp>,
+    lambda_count: i32, // should be global
 }
 
 impl Parser {
@@ -380,6 +366,7 @@ impl Parser {
         return Parser {
             tokens: tokens,
             sexprs: Vec::new(),
+            lambda_count: 0,
         };
     }
 
@@ -391,9 +378,10 @@ impl Parser {
         let mut stack: Vec<SExp> = Vec::new();
 
         while !self.tokens.is_empty() {
-            match self.tokens[0] {
+            let token = &(self.tokens[0]).clone();
+            match token {
                 Token::LPar => {
-                    stack.push(SExp::new_list(parse_sexp(&self.tokens[1])));
+                    stack.push(SExp::new_list(self.parse_sexp(&(self.tokens[1]).clone())));
                     self.drop_tokens(2);
                 }
                 Token::RPar => {
@@ -412,16 +400,52 @@ impl Parser {
                     let new_list = stack
                         .pop()
                         .unwrap()
-                        .append_to_list(parse_sexp(&self.tokens[0]));
+                        .append_to_list(self.parse_sexp(&(self.tokens[0]).clone()));
                     stack.push(new_list);
                     self.drop_tokens(1);
                 }
             }
         }
     }
+
+    fn parse_sexp(&mut self, token: &Token) -> SExp {
+        match token {
+            Token::Sym(str) => match str.as_str() {
+                "lambda" => SExp::Lambda(self.next_lambda_id()),
+                "quote" => SExp::Quote,
+                "nil" => SExp::Nil,
+                "true" => SExp::Bool(true),
+                "false" => SExp::Bool(false),
+                _ => SExp::Id(String::from(str)),
+            },
+            Token::Str(str) => SExp::Sym(String::from(str)),
+            Token::Op(str) => match EvMat::from_string(str) {
+                Some(op) => SExp::Op(op),
+                None => {
+                    let cmp = EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
+                    SExp::Cmp(cmp)
+                }
+            },
+            Token::Num(str) => SExp::Num(String::from(str).parse::<i32>().unwrap()),
+            any => {
+                panic!("ERROR: Unknown token: {any:?}");
+            }
+        }
+    }
+
+    fn next_lambda_id(&mut self) -> i32 {
+        self.lambda_count += 1;
+        self.lambda_count
+    }
 }
 
 type EnvTable = HashMap<String, SExp>;
+#[derive(Debug)]
+struct LocalEnv {
+    loc_table: EnvTable,
+}
+
+
 
 #[derive(Debug)]
 struct EvalEnvironment {
@@ -463,6 +487,18 @@ impl EvalEnvironment {
         self.met_table.get(name).unwrap()
     }
 
+    fn eval_lambda(&mut self, lambda_id: i32, expr: &SExp, loc_table: &mut EnvTable) ->SExp {
+        // generate random uuid on parsing state
+        // transform lambda to regular meth to local table
+        // return it as new SExp::Id() with random uuid
+        // treat it as Id
+        // but it will lose all localtable data
+
+
+        return SExp::Cons { car: Box::new(SExp::Id(lambda_id.to_string())), cdr: Box::new(expr.clone()) };
+    }
+
+
     fn eval_expr(&mut self, expr: &SExp, loc_table: &mut EnvTable) -> SExp {
         // pretty_print_list(expr, 0);
         match expr {
@@ -470,18 +506,19 @@ impl EvalEnvironment {
                 SExp::Id(_) => self.eval_func(car, cdr, None, loc_table),
                 SExp::Op(s) => self.eval_mat(s, cdr, None, loc_table),
                 SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_table),
-                SExp::Num(num) => SExp::Num(num.clone()),
-                SExp::Sym(sym) => SExp::Sym(sym.clone()),
-                SExp::Bool(b) => SExp::Bool(b.clone()),
+                SExp::Num(num) => SExp::Num(*num),
+                SExp::Sym(sym) => SExp::Sym(sym.to_string()),
+                SExp::Bool(b) => SExp::Bool(*b),
+                // SExp::Lambda(id) => self.eval_lambda(*id, cdr, loc_table),
                 SExp::Nil => SExp::Nil,
                 _ => {
                     panic!("ERROR: can't match eval expr car: {car:?}");
                 }
             },
             SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_table),
-            SExp::Num(num) => SExp::Num(num.clone()),
-            SExp::Sym(sym) => SExp::Sym(sym.clone()),
-            SExp::Bool(b) => SExp::Bool(b.clone()),
+            SExp::Num(num) => SExp::Num(*num),
+            SExp::Sym(sym) => SExp::Sym(sym.to_string()),
+            SExp::Bool(b) => SExp::Bool(*b),
             SExp::Nil => SExp::Nil,
             _ => {
                 panic!("ERROR: can't match eval expr: {expr:?}");
@@ -749,21 +786,15 @@ impl EvalEnvironment {
                 match expr {
                     SExp::Nil => return acc.unwrap(),
                     SExp::Cons { car, cdr } => {
-                        // println!("Len: {len}", len=);
                         let len = expr.get_list_vec().len();
                         if len > 2 {
                             panic!("Cons takes only 2 arguments: {expr:?}");
                         }
 
-                        // println!("cdr: {cdr:?}");
                         let first = self.eval_expr(car, loc_table);
                         // we know there are only two args, so seconds
                         // only should have car
                         let second = self.eval_expr(cdr.get_car(), loc_table);
-
-                        // println!("first {first:?}");
-                        // println!("second {second:?}");
-
                         if second.is_list() || second.is_nil() {
                             return second.prepend_to_list(first);
                         } else {
@@ -908,7 +939,7 @@ fn main() {
 
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
-        // println!("\n-> {expr:?}\n");
+        println!("\n-> {expr:?}\n");
         let mut loc_table: EnvTable = EvalEnvironment::new_env_table();
         let result = env.eval_expr(expr, &mut loc_table);
         println!("Result: {result:?}");

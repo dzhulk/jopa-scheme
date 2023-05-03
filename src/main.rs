@@ -389,6 +389,10 @@ impl EvalEnvironment {
         };
     }
 
+    fn new_env_table() -> EnvTable {
+        return  HashMap::new();
+    }
+
     fn has_var(&self, name: &str) -> bool {
         self.var_table.contains_key(name)
     }
@@ -606,7 +610,7 @@ impl EvalEnvironment {
             }
             met if self.has_met(met) => {
                 let func = self.get_met(met).clone();
-                let mut new_loc_table: EnvTable = HashMap::new();
+                let mut new_loc_table = EvalEnvironment::new_env_table();
                 if let Some(args) = self.get_args(met) {
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter  = args_exprs.into_iter();
@@ -672,7 +676,7 @@ fn main() {
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
         println!("\n-> {expr:?}\n");
-        let mut loc_table: EnvTable = HashMap::new();
+        let mut loc_table: EnvTable = EvalEnvironment::new_env_table();
         let result = env.eval_expr(expr, &mut loc_table);
         println!("Result: {result:?}");
         // println!("ENV: {env:?}");

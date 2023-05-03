@@ -1,6 +1,5 @@
+(define (fib n) (if (= n 0) 0 (if (<= n 2) 1 (+ (fib (- n 1)) (fib (- n 2))))))
+
+(fib 14)
 
 
-(define (greet name) (println "Hello" name))
-
-
-(greet (incr 20))

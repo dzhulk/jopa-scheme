@@ -223,14 +223,18 @@ impl SExp {
         }
     }
 
-    fn get_list_vec(&self) -> Vec<&SExp> {
-        let mut c = self;
-        let mut res: Vec<&SExp> = Vec::new();
-        while c.is_list() {
-            let (car, cdr) = c.get_list_pair();
-            res.push(car);
-            c = cdr;
+    fn get_list_vec(&self) -> Vec<SExp> {
+        let mut res: Vec<SExp> = Vec::new();
+        loop {
+            let (mut car, mut cdr) = self.get_list_pair();
+            res.push(car.clone());
+            while cdr.is_list() {
+                (car, cdr) = cdr.get_list_pair();
+                res.push(car.clone());
+            }
+            break;
         }
+
         return res;
     }
 
@@ -374,7 +378,6 @@ struct EvalEnvironment {
     arg_table: EnvTable,
     met_table: EnvTable,
     var_table: EnvTable,
-    loc_table: EnvTable,
 }
 
 impl EvalEnvironment {
@@ -383,16 +386,11 @@ impl EvalEnvironment {
             arg_table: HashMap::new(),
             met_table: HashMap::new(),
             var_table: HashMap::new(),
-            loc_table: HashMap::new(),
         };
     }
 
     fn has_var(&self, name: &str) -> bool {
         self.var_table.contains_key(name)
-    }
-
-    fn has_loc(&self, name: &str) -> bool {
-        self.loc_table.contains_key(name)
     }
 
     fn has_met(&self, name: &str) -> bool {
@@ -403,10 +401,6 @@ impl EvalEnvironment {
         self.var_table.get(name).unwrap()
     }
 
-    fn get_loc(&self, name: &str) -> &SExp {
-        self.loc_table.get(name).unwrap()
-    }
-
     fn get_args(&self, name: &str) -> Option<&SExp> {
         self.arg_table.get(name)
     }
@@ -415,252 +409,247 @@ impl EvalEnvironment {
         self.met_table.get(name).unwrap()
     }
 
-    fn put_local(&mut self, name: String, val: &SExp) {
-        self.loc_table.insert(name.to_string(), val.clone());
-    }
-}
-
-fn put_local(loc_table: &mut EnvTable, name: String, val: &SExp) {
-    loc_table.insert(name.to_string(), val.clone());
-}
-
-fn get_args<'a>(arg_table: &'a mut EnvTable, name: &str) -> Option<&'a SExp> {
-    arg_table.get(name)
-}
-
-fn get_met<'a>(met_table: &'a mut EnvTable, name: &str) -> &'a SExp {
-    met_table.get(name).unwrap()
-}
-
-fn eval_mat(op: &EvMat, expr: &SExp, env: &mut EvalEnvironment, acc: Option<i32>) -> SExp {
-    if acc.is_none() {
-        // println!("Eval: {op:?} -> {expr:?}");
-    }
-
-    match expr {
-        SExp::Nil => SExp::Num(acc.unwrap()),
-        _ => {
-            let (n_car, n_cdr) = expr.get_list_pair();
-            let SExp::Num(lhs) = eval_expr(n_car, env) else { panic!("Math on not Num type!") };
-            let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
-            eval_mat(op, n_cdr, env, new_acc)
+    fn eval_expr(&mut self, expr: &SExp, loc_table: &mut EnvTable) -> SExp {
+        // pretty_print_list(expr, 0);
+        match expr {
+            SExp::Cons { car, cdr } => {
+                match car.as_ref() {
+                    SExp::Id(_)=> { self.eval_func(car, cdr, None, loc_table) },
+                    SExp::Op(s)=> { self.eval_mat(s, cdr, None, loc_table) },
+                    SExp::Cmp(s)=> { self.eval_cmp(s, cdr, None, loc_table) },
+                    SExp::Num(num) => SExp::Num(num.clone()),
+                    SExp::Sym(sym) => SExp::Sym(sym.clone()),
+                    SExp::Bool(b) => SExp::Bool(b.clone()),
+                    _ => { SExp::Nil }
+                }
+            },
+            SExp::Id(id) => self.eval_func(expr, &SExp::Nil, None, loc_table),
+            SExp::Num(num) => SExp::Num(num.clone()),
+            SExp::Sym(sym) => SExp::Sym(sym.clone()),
+            SExp::Bool(b) => SExp::Bool(b.clone()),
+            _ => { SExp::Nil },
         }
     }
-}
 
-fn eval_cmp(op: &EvCmp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
-    if acc.is_none() {
-        // println!("Eval: {op:?} -> {expr:?}");
+    fn eval_mat(&mut self, op: &EvMat, expr: &SExp, acc: Option<i32>, loc_table: &mut EnvTable) -> SExp {
+        match expr {
+            SExp::Nil => SExp::Num(acc.unwrap()),
+            _ => {
+                let (n_car, n_cdr) = expr.get_list_pair();
+                let SExp::Num(lhs) = self.eval_expr(n_car, loc_table) else { panic!("Math on not Num type!") };
+                let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
+                self.eval_mat(op, n_cdr, new_acc, loc_table)
+            }
+        }
+    }
+    fn eval_cmp(&mut self, op: &EvCmp, expr: &SExp, acc: Option<SExp>,  loc_table: &mut EnvTable) -> SExp {
+        if acc.is_none() {
+            // println!("Eval: {op:?} -> {expr:?}");
+        }
+
+        match expr {
+            SExp::Nil => SExp::Bool(true),
+            _ => {
+                let (n_car, n_cdr) = expr.get_list_pair();
+                let lhs = self.eval_expr(n_car, loc_table);
+                let next_acc = match acc {
+                    Some(a) =>
+                        if a.cmp(&lhs, op) {
+                            lhs
+                        } else {
+                            return SExp::Bool(false)
+                        }
+                    None => lhs
+                };
+                return self.eval_cmp(op, n_cdr, Some(next_acc), loc_table);
+            }
+        }
     }
 
-    match expr {
-        SExp::Nil => SExp::Bool(true),
-        _ => {
-            let (n_car, n_cdr) = expr.get_list_pair();
-            let lhs = eval_expr(n_car, env);
-            let next_acc = match acc {
-                Some(a) =>
-                    if a.cmp(&lhs, op) {
-                        lhs
-                    } else {
+
+
+    fn eval_func(&mut self, id: &SExp, expr: &SExp, acc: Option<SExp>, loc_table: &mut EnvTable) -> SExp {
+        match id.get_id().as_str() {
+            "if" => {
+                match expr {
+                    SExp::Nil => {
+                        return acc.unwrap();
+                    },
+                    SExp::Cons { car, cdr } => {
+                        let cond_res = self.eval_expr(car, loc_table);
+                        let (true_branch, false_branch) = cdr.get_list_pair();
+                        if cond_res.is_true() {
+                            return self.eval_expr(true_branch, loc_table);
+                        } else {
+                            let (false_branch, _) = false_branch.get_list_pair();
+                            return self.eval_expr(false_branch, loc_table);
+                        }
+                    },
+                    _ => {
+                        panic!("Error in if cond {expr:?}");
+                    }
+                };
+            },
+            "or"  => {
+                match expr {
+                    SExp::Nil => {
                         return SExp::Bool(false)
+                    },
+                    SExp::Cons { car, cdr } => {
+                        let lhs = self.eval_expr(car, loc_table);
+                        let new_acc = match acc {
+                            Some(_) =>
+                                if lhs.is_true() {
+                                    return SExp::Bool(true)
+                                } else {
+                                    lhs
+                                }
+                            None => lhs
+                        };
+                        return self.eval_func(id, cdr, Some(new_acc), loc_table);
+                    },
+                    _ => {
+                        panic!("Not joinable {expr:?}");
                     }
-                None => lhs
-            };
-            return eval_cmp(op, n_cdr, env, Some(next_acc));
-        }
-    }
-}
-
-fn eval_func(id: &SExp, expr: &SExp, env: &mut EvalEnvironment, acc: Option<SExp>) -> SExp {
-    match id.get_id().as_str() {
-        "if" => {
-            match expr {
-                SExp::Nil => {
-                    return acc.unwrap();
-                },
-                SExp::Cons { car, cdr } => {
-                    let cond_res = eval_expr(car, env);
-                    let (true_branch, false_branch) = cdr.get_list_pair();
-                    if cond_res.is_true() {
-                        return eval_expr(true_branch, env);
-                    } else {
-                        let (false_branch, _) = false_branch.get_list_pair();
-                        return eval_expr(false_branch, env);
+                };
+            }
+            "and" => {
+                match expr {
+                    SExp::Nil => {
+                        return acc.unwrap();
+                    },
+                    SExp::Cons { car, cdr } => {
+                        let lhs = self.eval_expr(car, loc_table);
+                        let new_acc = match acc {
+                            Some(a) =>
+                                if a.is_true() && lhs.is_true() {
+                                    lhs
+                                } else {
+                                    return SExp::Bool(false)
+                                }
+                            None => lhs
+                        };
+                        return self.eval_func(id, cdr, Some(new_acc), loc_table);
+                    },
+                    _ => {
+                        panic!("Not joinable {expr:?}");
                     }
-                },
-                _ => {
-                    panic!("Error in if cond {expr:?}");
+                };
+            }
+            "join" => {
+                match expr {
+                    SExp::Nil => {
+                        let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
+                        return SExp::Sym(output)
+                    },
+                    SExp::Cons { car, cdr } => {
+                        let lhs = self.eval_expr(car, loc_table);
+                        let str = lhs.as_string();
+                        let new_acc = acc.map(|a| {
+                            SExp::Sym(a.as_string() + " " + &str)
+                        }).or(Some(SExp::Sym(str)));
+                        return self.eval_func(id, cdr, new_acc, loc_table);
+                    },
+                    _ => {
+                        panic!("Not joinable {expr:?}");
+                    }
+                };
+            },
+            "println" => {
+                match expr {
+                    SExp::Nil => {
+                        let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
+                        println!("{output}");
+                        return SExp::Nil;
+                    },
+                    SExp::Cons { car, cdr } => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        let str = lhs.as_string();
+                        let new_acc = acc.map(|a| {
+                            SExp::Sym(a.as_string() + " " + &str)
+                        }).or(Some(SExp::Sym(str)));
+                        return self.eval_func(id, cdr, new_acc, loc_table);
+                    },
+                    _ => {
+                        panic!("Not printable {expr:?}");
+                    }
+                };
+            },
+            "define" => {
+                match expr {
+                    SExp::Cons { car, cdr } if car.is_id() => {
+                        let (n_cdr, _) = cdr.get_list_pair();
+                        let var = self.eval_expr(n_cdr, loc_table);
+                        self.var_table.insert(car.get_id(), var);
+                        return SExp::Nil;
+                    },
+                    SExp::Cons { car, cdr } if car.is_list() => {
+                        let (name, args) = car.get_list_pair();
+                        self.arg_table.insert(name.get_id(), args.clone());
+                        let (body, _) = cdr.get_list_pair();
+                        self.met_table.insert(name.get_id(), body.clone());
+                        return SExp::Nil;
+                    },
+                    _ => {
+                        panic!("ERROR: invalid define {expr:?}");
+                    }
                 }
-            };
-        },
-        "or"  => {
-            match expr {
-                SExp::Nil => {
-                    return SExp::Bool(false)
-                },
-                SExp::Cons { car, cdr } => {
-                    let lhs = eval_expr(car, env);
-                    let new_acc = match acc {
-                        Some(_) =>
-                            if lhs.is_true() {
-                                return SExp::Bool(true)
-                            } else {
-                                lhs
+            },
+            var if self.has_var(var) => {
+                return self.get_var(var).clone();
+            }
+            var if loc_table.contains_key(var) => {
+                return loc_table.get(var).unwrap().clone();
+            }
+            met if self.has_met(met) => {
+                let func = self.get_met(met).clone();
+                let mut new_loc_table: EnvTable = HashMap::new();
+                if let Some(args) = self.get_args(met) {
+                    let args_exprs = args.get_list_vec(); // should be all ids
+                    let mut args_iter  = args_exprs.into_iter();
+                    let (mut arg_f, mut rest_args_f) = expr.get_list_pair(); 
+                    loop {
+                        let arg_name_opt = args_iter.next(); 
+                        match (arg_name_opt, arg_f) {
+                            (Some(_), SExp::Nil) => {
+                                panic!("ERROR: not enuogh args for {met}")
+                            },
+                            (Some(arg_name), _) => {
+                                let arg_val = self.eval_expr(arg_f, loc_table);
+                                new_loc_table.insert(arg_name.get_id(), arg_val);
+                                if rest_args_f.is_list() {
+                                    (arg_f, rest_args_f) = rest_args_f.get_list_pair();
+                                } else {
+                                    arg_f = &SExp::Nil;
+                                }
+                            },
+                            (None, SExp::Nil) => { 
+                                break;
+                            },
+                            _ => {
+                                panic!("ERROR: argumes arity don't match for {met}");
                             }
-                        None => lhs
-                    };
-                    return eval_func(id, cdr, env, Some(new_acc));
-                },
-                _ => {
-                    panic!("Not joinable {expr:?}");
-                }
-            };
-        }
-        "and" => {
-            match expr {
-                SExp::Nil => {
-                    return acc.unwrap();
-                },
-                SExp::Cons { car, cdr } => {
-                    let lhs = eval_expr(car, env);
-                    let new_acc = match acc {
-                        Some(a) =>
-                            if a.is_true() && lhs.is_true() {
-                                lhs
-                            } else {
-                                return SExp::Bool(false)
-                            }
-                        None => lhs
-                    };
-                    return eval_func(id, cdr, env, Some(new_acc));
-                },
-                _ => {
-                    panic!("Not joinable {expr:?}");
-                }
-            };
-        }
-        "join" => {
-            match expr {
-                SExp::Nil => {
-                    let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
-                    return SExp::Sym(output)
-                },
-                SExp::Cons { car, cdr } => {
-                    let lhs = eval_expr(car, env);
-                    let str = lhs.as_string();
-                    let new_acc = acc.map(|a| {
-                        SExp::Sym(a.as_string() + " " + &str)
-                    }).or(Some(SExp::Sym(str)));
-                    return eval_func(id, cdr, env, new_acc);
-                },
-                _ => {
-                    panic!("Not joinable {expr:?}");
-                }
-            };
-        },
-        "println" => {
-            match expr {
-                SExp::Nil => {
-                    let output = acc.map(|a| a.as_string()).or(Some(String::from(""))).unwrap();
-                    println!("{output}");
-                    return SExp::Nil;
-                },
-                SExp::Cons { car, cdr } => {
-                    let mut lhs = eval_expr(car, env);
-                    while lhs.is_id() {
-                        lhs = eval_expr(&lhs, env);
+                        }
+
                     }
-                    println!("lhs: {lhs:?}");
-                    let str = lhs.as_string();
-                    let new_acc = acc.map(|a| {
-                        SExp::Sym(a.as_string() + " " + &str)
-                    }).or(Some(SExp::Sym(str)));
-                    return eval_func(id, cdr, env, new_acc);
-                },
-                _ => {
-                    panic!("Not printable {expr:?}");
                 }
-            };
-        },
-        "define" => {
-            match expr {
-                SExp::Cons { car, cdr } if car.is_id() => {
-                    let (n_cdr, _) = cdr.get_list_pair();
-                    let var = eval_expr(n_cdr, env);
-                    env.var_table.insert(car.get_id(), var);
-                    return SExp::Nil;
-                },
-                SExp::Cons { car, cdr } if car.is_list() => {
-                    let (name, args) = car.get_list_pair();
-                    env.arg_table.insert(name.get_id(), args.clone());
-                    let (body, _) = cdr.get_list_pair();
-                    env.met_table.insert(name.get_id(), body.clone());
-                    return SExp::Nil;
-                },
-                _ => {
-                    panic!("ERROR: invalid define {expr:?}");
-                }
+                // FIXME: error due to local table clearing
+                // pretty_print_list(&func, 0);
+                // println!("Exec func '{met}  with locals {loc_table:?}");
+                let result = self.eval_expr(&func, &mut new_loc_table);
+                // println!("Exec func '{met}' with locals {loc_table:?} -> ret {result:?}");
+                return result;
             }
-        },
-        var if env.has_var(var) => {
-            return env.get_var(var).clone();
-        }
-        var if env.has_loc(var) => {
-            return env.get_loc(var).clone();
-        }
-        met if env.has_met(met) => {
-            println!("Got the mthod call");
-            let func = get_met(&mut env.met_table, met).clone();
-            if let Some(args) = get_args(&mut env.arg_table, met) {
-                let args_exprs = args.get_list_vec(); // should be all ids
-                let (mut arg_f, mut rest_args_f) = expr.get_list_pair(); // FIX ME NEED TO BE EVALUATED
-                // if args_exprs.len() != args_vals.len() {
-                //     panic!("ERROR: arguments len not match for {met}");
-                // }
-                for i in 0..args_exprs.len() {
-                    let id = args_exprs[i].get_id();
-                    let v = eval_expr(arg_f, env);
-                    (arg_f, rest_args_f) = rest_args_f.get_list_pair();
-
-                    put_local(&mut env.loc_table, id, &v);
-                }
-                println!("Local table: {lt:?}", lt = &env.loc_table);
+            _ => {
+                panic!("Unknown {id:?}");
             }
-            pretty_print_list(&func, 0);
-            let result = eval_expr(&func, env);
-            env.loc_table.clear();
-            return result;
-        }
-        _ => {
-            panic!("Unknown {id:?}");
-        }
-    };
-}
-
-
-fn eval_expr(expr: &SExp, env: &mut EvalEnvironment) -> SExp {
-    pretty_print_list(expr, 0);
-    match expr {
-        SExp::Cons { car, cdr } => {
-            match car.as_ref() {
-                SExp::Id(_)=> { eval_func(car, cdr, env, None) },
-                SExp::Op(s)=> { eval_mat(s, cdr, env, None) },
-                SExp::Cmp(s)=> { eval_cmp(s, cdr, env, None) },
-                SExp::Num(num) => SExp::Num(num.clone()),
-                SExp::Sym(sym) => SExp::Sym(sym.clone()),
-                SExp::Bool(b) => SExp::Bool(b.clone()),
-                _ => { SExp::Nil }
-            }
-        },
-        SExp::Id(id) => eval_func(expr, &SExp::Nil, env, None),
-        SExp::Num(num) => SExp::Num(num.clone()),
-        SExp::Sym(sym) => SExp::Sym(sym.clone()),
-        SExp::Bool(b) => SExp::Bool(b.clone()),
-        _ => { SExp::Nil },
+        };
     }
-}
 
+}
 
 fn main() {
     let args = std::env::args();
@@ -683,10 +672,10 @@ fn main() {
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
         println!("\n-> {expr:?}\n");
-        // pretty_print_list(expr, 0);
-        let result = eval_expr(expr, &mut env);
+        let mut loc_table: EnvTable = HashMap::new();
+        let result = env.eval_expr(expr, &mut loc_table);
         println!("Result: {result:?}");
-        println!("ENV: {env:?}");
+        // println!("ENV: {env:?}");
     }
 }
 

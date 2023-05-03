@@ -62,7 +62,7 @@ impl<'a> Lexer<'a> {
                     tokens.push(Token::RPar);
                 }
                 s if s.is_alphabetic() => {
-                    let token = self.chop_while(|c| c.is_alphanumeric());
+                    let token = self.chop_while(|c| c.is_alphanumeric() || c == '?' );
                     tokens.push(Token::Sym(token))
                 }
                 s if s.is_numeric() => {
@@ -626,7 +626,7 @@ impl EvalEnvironment {
                     }
                 };
             },
-            "isnil" => {
+            "nil?" => {
                 match expr {
                     SExp::Nil => { panic!("Nil takes 1 arg") },
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
@@ -663,6 +663,40 @@ impl EvalEnvironment {
                     },
                     _ => {
                         panic!("Can't parse 'cdr' {expr:?}");
+                    }
+                };
+            },
+            "list?" => {
+                match expr {
+                    SExp::Nil => { panic!("list? expects 1 argument") },
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        return SExp::Bool(lhs.is_list() || lhs.is_nil());
+                    }
+                    _ => {
+                        panic!("Can't parse 'list?' {expr:?}");
+                    }
+                };
+            },
+            "length" => {
+                match expr {
+                    SExp::Nil => { panic!("LENGTH expects 1 argument") },
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_table);
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_table);
+                        }
+                        if lhs.is_list() || lhs.is_nil() {
+                            return SExp::Num(lhs.get_list_vec().len() as i32);
+                        } else {
+                            panic!("LENGTH works only on lists {expr:?}");
+                        }
+                    },
+                    _ => {
+                        panic!("Can't parse 'length' {expr:?}");
                     }
                 };
             },
@@ -848,7 +882,7 @@ fn main() {
 
     println!("Expressions:");
     for expr in parser.sexprs.iter() {
-        println!("\n-> {expr:?}\n");
+        // println!("\n-> {expr:?}\n");
         let mut loc_table: EnvTable = EvalEnvironment::new_env_table();
         let result = env.eval_expr(expr, &mut loc_table);
         println!("Result: {result:?}");

@@ -755,6 +755,8 @@ impl EvalEnvironment {
                 car: args,
                 cdr: body,
             } => {
+                println!("env in lam: {loc_env:?}");
+                println!("rhs in lam: {rhs:?}");
                 let lambda_captured_args = match loc_env.lam_env.get(lambda) {
                     Some(capt) => {
                         let v = capt.get_list_vec();
@@ -805,11 +807,11 @@ impl EvalEnvironment {
 
     pub fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
         if expr.is_list() || expr.is_nil() || expr.is_lambda() {
-            debug_log!("Eval: {expr}");
+            debug_log!("Eval: {expr:?}");
         }
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
-                SExp::Id(_) => self.eval_func(car, cdr, None, loc_env::create_child()),
+                SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
                 SExp::Op(s) => self.eval_mat(s, cdr, None, loc_env),
                 SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_env),
                 SExp::Num(num) => SExp::Num(*num),
@@ -890,7 +892,7 @@ impl EvalEnvironment {
         acc: Option<SExp>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
-        debug_log!("Evaling exp {expr}");
+        debug_log!("Evaling exp {expr:?}");
         match id.get_id().as_str() {
             "list" => {
                 match expr {
@@ -1185,7 +1187,7 @@ impl EvalEnvironment {
             var if loc_env.has_var(var) => {
                 let val = loc_env.get_var(var).clone();
                 debug_log!("glob var: {var} -> {val}");
-                if val.is_list() && val.get_car().is_lambda() {
+                if val.is_list() && val.get_car().is_lambda() && !expr.is_nil(){
                     return self.eval_lambda(&val, &expr, loc_env);
                 }
                 return val;

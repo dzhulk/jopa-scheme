@@ -7,4 +7,16 @@ edition = "2021"
 # Some dump comment
 
 [dependencies]
-rustyline = "11.0.0"
+rustyline = {version="11.0.0", features=['with-file-history']}
+
+[lib]
+name = "jop"           # The name of the target.
+path = "src/lib.rs"    # The source file of the target.
+
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "jopc"
+path = "src/bin/jopc.rs"

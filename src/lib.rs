@@ -1,55 +1,24 @@
+#![allow(dead_code)]
+
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
-use std::fs;
-use std::env;
+
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
 
+#[macro_export]
 macro_rules! debug_log {
     ($($arg:tt)*)=> {
-        match env::var("JOPA_TRACE") {
+        match std::env::var("JOPA_TRACE") {
             Ok(v) if v == "1" => println!($($arg)*),
             _ => {}
         }
     };
 }
 
-fn main() {
-    let args = std::env::args();
-    let arguments = args.collect::<Vec<_>>();
-
-    let file_path = &arguments[1];
-    println!("Reading '{file_path}'");
-    let content = fs::read_to_string(file_path).expect("Cant read file content");
-    println!(
-        "Source:\n--------\n{content}\n----------",
-        content = content.trim()
-    );
-    let chars = content.chars().into_iter().collect::<Vec<_>>();
-    let mut lexer = Lexer { input: &chars };
-    let tokens = lexer.parse();
-    debug_log!("Tokens: #{tokens:?}");
-    debug_log!("------------");
-    let mut parser = Parser::new(tokens);
-    parser.parse_tokens();
-
-    let mut env = EvalEnvironment::new();
-
-    println!("Expressions:");
-    for expr in parser.sexprs.iter() {
-        debug_log!("\n-> {expr:?}\n");
-        let mut loc_env: LocalEnv = LocalEnv::new();
-        let result = env.eval_expr(expr, &mut loc_env);
-        println!("{v}", v=format!("Result: {result:?}"));
-        debug_log!("ENV: {env:?}");
-    }
-}
-
-
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-enum Token {
+pub enum Token {
     LPar,
     RPar,
     Num(String),
@@ -59,11 +28,15 @@ enum Token {
 }
 
 #[derive(Debug)]
-struct Lexer<'a> {
-    input: &'a [char],
+pub struct Lexer {
+    input: Vec<char>,
 }
 
-impl<'a> Lexer<'a> {
+impl Lexer {
+    pub fn new(chars: Vec<char>) -> Self {
+        Lexer { input: chars }
+    }
+
     fn peek(&self) -> Option<char> {
         if self.input.is_empty() {
             return None;
@@ -74,7 +47,7 @@ impl<'a> Lexer<'a> {
 
     fn next(&mut self) -> char {
         let chr = self.input[0];
-        self.input = &self.input[1..];
+        self.input = self.input.drain(1..).collect();
         return chr;
     }
 
@@ -90,7 +63,7 @@ impl<'a> Lexer<'a> {
         return result.iter().collect();
     }
 
-    fn parse(&mut self) -> Vec<Token> {
+    pub fn parse(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = Vec::new();
         while let Some(sym) = self.peek() {
             match sym {
@@ -137,7 +110,7 @@ impl<'a> Lexer<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum EvMat {
+pub enum EvMat {
     Add,
     Sub,
     Mul,
@@ -169,7 +142,7 @@ impl EvMat {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum EvCmp {
+pub enum EvCmp {
     Lt,
     Gt,
     Eq,
@@ -204,7 +177,7 @@ impl EvCmp {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum SExp {
+pub enum SExp {
     Lambda(i32),
     Id(String),
     Op(EvMat),
@@ -345,8 +318,9 @@ impl SExp {
         }
     }
 
-    fn as_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         match self {
+            Self::Id(id) => id.to_string(),
             Self::Num(num) => num.to_string(),
             Self::Sym(str) => str.clone(),
             Self::Nil => String::from("()"),
@@ -396,7 +370,7 @@ impl SExp {
 }
 
 #[derive(Debug)]
-struct Parser {
+pub struct Parser {
     tokens: Vec<Token>,
     sexprs: Vec<SExp>,
     stack: Vec<SExp>,
@@ -404,7 +378,7 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         return Parser {
             tokens,
             sexprs: Vec::new(),
@@ -421,7 +395,7 @@ impl Parser {
         (self.tokens[0]).clone()
     }
 
-    fn parse_tokens(&mut self) {
+    pub fn parse_tokens(&mut self) {
         let mut stack: Vec<SExp> = Vec::new();
 
         while !self.tokens.is_empty() {
@@ -458,6 +432,10 @@ impl Parser {
         }
     }
 
+    pub fn expressions_iterator(&self) -> std::slice::Iter<SExp> {
+        return self.sexprs.iter()
+    }
+
     fn parse_sexp(&mut self, token: &Token) -> SExp {
         match token {
             Token::Sym(str) => match str.as_str() {
@@ -492,13 +470,13 @@ impl Parser {
 
 type EnvTable = HashMap<String, SExp>;
 #[derive(Debug)]
-struct LocalEnv {
+pub struct LocalEnv {
     loc_env: EnvTable,
     lam_env: EnvTable,
 }
 
 impl LocalEnv {
-    fn new() -> Self {
+    pub fn new() -> Self {
         return LocalEnv {
             loc_env: EnvTable::new(),
             lam_env: EnvTable::new(),
@@ -507,14 +485,14 @@ impl LocalEnv {
 }
 
 #[derive(Debug)]
-struct EvalEnvironment {
+pub struct EvalEnvironment {
     arg_table: EnvTable,
     met_table: EnvTable,
     var_table: EnvTable,
 }
 
 impl EvalEnvironment {
-    fn new() -> Self {
+    pub fn new() -> Self {
         return EvalEnvironment {
             arg_table: HashMap::new(),
             met_table: HashMap::new(),
@@ -619,7 +597,7 @@ impl EvalEnvironment {
         }
     }
 
-    fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
+    pub fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
         debug_log!("{expr:#?}");
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
@@ -1035,7 +1013,6 @@ impl EvalEnvironment {
                         }
                     }
                 }
-                // pretty_print_list(&func, 0);
                 // println!("Exec func '{met}  with locals {loc_env:?}");
                 let result = self.eval_expr(&func, &mut new_loc_env);
                 // println!("Exec func '{met}' with locals {loc_env:?} -> ret {result:?}");
@@ -1048,19 +1025,3 @@ impl EvalEnvironment {
     }
 }
 
-#[allow(dead_code)]
-fn pretty_print_list(list: &SExp, level: usize) {
-    println!("{list:#?}");
-    // let cis = std::iter::repeat("    ").take(level).collect::<String>();
-    // match list {
-    //     SExp::Cons { car, cdr } => {
-    //         println!("{cis}Cons: {{");
-    //         pretty_print_list(car, level + 1);
-    //         pretty_print_list(cdr, level + 1);
-    //         println!("{cis}}}");
-    //     }
-    //     any => {
-    //         println!("{cis}{any:?}");
-    //     }
-    // }
-}

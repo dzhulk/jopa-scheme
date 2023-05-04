@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 rustyline = {version="11.0.0", deafult-features=true}
-
+anyhow = { version = "1.0" }
 
 [lib]
 name = "jop"           # The name of the target.

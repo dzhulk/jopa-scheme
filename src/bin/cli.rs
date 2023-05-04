@@ -1,7 +1,8 @@
 use jop::*;
 
+use anyhow::{Result, Context, bail};
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Result};
+use rustyline::{DefaultEditor};
 
 fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
@@ -15,8 +16,12 @@ fn main() -> Result<()> {
         let readline = rl.readline("jop=> ");
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                execute_line(&mut env, line);
+                rl.add_history_entry(line.as_str()).unwrap();
+                let res =  execute_line(&mut env, line);
+                match res {
+                    Err(err) => {println!("Error occured:\n\t{err}")},
+                    _ => {}
+                }
             },
             Err(ReadlineError::Interrupted) => {
                 println!("Bye!");
@@ -32,19 +37,24 @@ fn main() -> Result<()> {
             }
         }
     }
-    rl.save_history("history.txt");
+    rl.save_history("history.txt").unwrap();
     Ok(())
 }
 
 
-fn execute_line(env: &mut EvalEnvironment, line: String) {
+fn execute_line(env: &mut EvalEnvironment, line: String) -> Result<()> {
     let chars = line.chars().into_iter().collect::<Vec<_>>();
     let mut lexer = Lexer::new(chars);
-    let tokens = lexer.parse();
-    debug_log!("Tokens: #{tokens:?}");
-    debug_log!("------------");
+    let tokens = match lexer.parse().context("Tokenization error") {
+        Ok(t) => t,
+        err   => bail!("Tokenization failed: {err:?}")
+    };
+
     let mut parser = Parser::new(tokens);
-    parser.parse_tokens();
+    match parser.parse_tokens() {
+        Ok(t) => t,
+        err   => bail!("AST parsing failed: {err:?}")
+    }
 
     debug_log!("Expressions:");
     for expr in parser.expressions_iterator() {
@@ -54,4 +64,6 @@ fn execute_line(env: &mut EvalEnvironment, line: String) {
         println!("{res}", res=result.as_string());
         debug_log!("ENV: {env:?}");
     }
+
+    Ok(())
 }

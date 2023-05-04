@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
+use anyhow::{Result, anyhow, Context};
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
-
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
@@ -37,25 +37,22 @@ impl Lexer {
         Lexer { input: chars }
     }
 
-    fn peek(&self) -> Option<char> {
-        if self.input.is_empty() {
-            return None;
-        } else {
-            return Some(self.input[0]);
+    fn peek(&self) -> Option<&char> {
+        self.input.first()
+    }
+
+    fn chop(&mut self) {
+        if !self.input.is_empty() {
+            self.input = self.input.drain(1..).collect();
         }
     }
 
-    fn next(&mut self) -> char {
-        let chr = self.input[0];
-        self.input = self.input.drain(1..).collect();
-        return chr;
-    }
-
-    fn chop_while(&mut self, f: impl Fn(char) -> bool) -> String {
+    fn chop_while(&mut self, f: impl Fn(&char) -> bool) -> String {
         let mut result: Vec<char> = Vec::new();
         while let Some(nxt) = self.peek() {
             if f(nxt) {
-                result.push(self.next());
+                result.push(nxt.clone());
+                self.chop();
             } else {
                 break;
             }
@@ -63,20 +60,20 @@ impl Lexer {
         return result.iter().collect();
     }
 
-    pub fn parse(&mut self) -> Vec<Token> {
+    pub fn parse(&mut self) -> Result<Vec<Token>> {
         let mut tokens: Vec<Token> = Vec::new();
         while let Some(sym) = self.peek() {
             match sym {
                 '(' => {
-                    self.next();
+                    self.chop();
                     tokens.push(Token::LPar);
                 }
                 ')' => {
-                    self.next();
+                    self.chop();
                     tokens.push(Token::RPar);
                 }
                 s if s.is_alphabetic() => {
-                    let token = self.chop_while(|c| c.is_alphanumeric() || c == '?');
+                    let token = self.chop_while(|c| c.is_alphanumeric() || *c == '?' || *c == '-' || *c == '_');
                     tokens.push(Token::Sym(token))
                 }
                 s if s.is_numeric() => {
@@ -84,28 +81,28 @@ impl Lexer {
                     tokens.push(Token::Num(token));
                 }
                 s if SKIP_SYMS.contains(&s) => {
-                    self.next();
+                    self.chop();
                 }
                 s if OPS.contains(&s) => {
-                    tokens.push(Token::Op(self.chop_while(|ch| ch != ' ')));
+                    tokens.push(Token::Op(self.chop_while(|ch| *ch != ' ')));
                 }
                 '"' => {
-                    self.next();
-                    tokens.push(Token::Str(self.chop_while(|ch| ch != '"')));
-                    self.next();
+                    self.chop();
+                    tokens.push(Token::Str(self.chop_while(|ch| *ch != '"')));
+                    self.chop();
                 }
                 ';' => {
-                    self.next();
-                    self.chop_while(|ch| ch != '\n');
-                    self.next();
+                    self.chop();
+                    self.chop_while(|ch| *ch != '\n');
+                    self.chop();
                 }
                 any => {
-                    println!("Unknown {any}");
-                    todo!();
+                    println!();
+                    return Err(anyhow!("Unknown symbol {any}"));
                 }
             };
         }
-        return tokens;
+        return Ok(tokens);
     }
 }
 
@@ -373,7 +370,6 @@ impl SExp {
 pub struct Parser {
     tokens: Vec<Token>,
     sexprs: Vec<SExp>,
-    stack: Vec<SExp>,
     lambda_count: i32, // should be global
 }
 
@@ -382,7 +378,6 @@ impl Parser {
         return Parser {
             tokens,
             sexprs: Vec::new(),
-            stack: Vec::new(),
             lambda_count: 0,
         };
     }
@@ -395,40 +390,49 @@ impl Parser {
         (self.tokens[0]).clone()
     }
 
-    pub fn parse_tokens(&mut self) {
+    pub fn parse_tokens(&mut self) -> Result<()> {
         let mut stack: Vec<SExp> = Vec::new();
 
         while !self.tokens.is_empty() {
             match self.peek_token() {
                 Token::LPar => {
                     self.drop_tokens(1);
-                    let mut token = self.peek_token();
-                    if token == Token::LPar {
-                        self.drop_tokens(1);
-                        token = self.peek_token();
-                        stack.push(SExp::Nil);
+                    loop {
+                        if self.peek_token() == Token::LPar {
+                            self.drop_tokens(1);
+                            stack.push(SExp::Nil);
+                        }
+                        break;
                     }
+                    let token = self.peek_token();
                     stack.push(SExp::new_list(self.parse_sexp(&token)));
                     self.drop_tokens(1);
                 }
                 Token::RPar => {
                     self.drop_tokens(1);
                     if stack.len() == 1 {
-                        self.sexprs.push(stack.pop().unwrap());
+                        self.sexprs.push(stack.pop().context("Invalid expression")?);
                     } else {
-                        let curr_sexp = stack.pop().unwrap();
-                        let parent = stack.pop().unwrap();
+                        let curr_sexp = stack.pop().context("Invalid expression")?;
+                        let parent = stack.pop().context("Invalid expression")?;
                         let new_list = parent.append_to_list(curr_sexp);
                         stack.push(new_list);
                     }
                 }
                 Token::Sym(_) | Token::Str(_) | Token::Op(_) | Token::Num(_) => {
                     let token = self.peek_token();
-                    let new_list = stack.pop().unwrap().append_to_list(self.parse_sexp(&token));
+                    let curr_sexp = stack.pop().context("Invalid expression")?;
+                    let new_list = curr_sexp.append_to_list(self.parse_sexp(&token));
                     stack.push(new_list);
                     self.drop_tokens(1);
                 }
             }
+        }
+
+        if stack.is_empty() {
+            Ok(())
+        } else {
+            return Err(anyhow!("Can't parse expression"))
         }
     }
 
@@ -791,7 +795,7 @@ impl EvalEnvironment {
             "nil?" => {
                 match expr {
                     SExp::Nil => {
-                        panic!("Nil takes 1 arg")
+                        panic!("Nil? takes 1 arg")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
                         let mut lhs = self.eval_expr(car, loc_env);

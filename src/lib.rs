@@ -2,6 +2,7 @@
 
 use anyhow::{Result, anyhow, Context};
 use std::cmp::{Eq, PartialEq};
+use std::fmt::Display;
 use std::collections::HashMap;
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
@@ -138,6 +139,19 @@ impl EvMat {
     }
 }
 
+impl Display for EvMat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+            Self::Mod => "%",
+        };
+        write!(f, "{}", str)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum EvCmp {
     Lt,
@@ -170,6 +184,19 @@ impl EvCmp {
             Self::GtEq => lhs >= rhs,
             Self::LtEq => lhs <= rhs,
         }
+    }
+}
+
+impl Display for EvCmp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Self::Eq => "=",
+            Self::Lt => "<",
+            Self::Gt => ">",
+            Self::GtEq => ">=",
+            Self::LtEq => "<=",
+        };
+        write!(f, "{}", str)
     }
 }
 
@@ -318,9 +345,12 @@ impl SExp {
     pub fn as_string(&self) -> String {
         match self {
             Self::Id(id) => id.to_string(),
+            Self::Lambda(_) => "lambda".to_string(),
             Self::Num(num) => num.to_string(),
             Self::Sym(str) => str.clone(),
             Self::Nil => String::from("()"),
+            Self::Op(op) => { format!("{}", op) },
+            Self::Cmp(cmp) => { format!("{}", cmp) },
             Self::Bool(b) => {
                 if *b {
                     String::from("true")
@@ -363,6 +393,43 @@ impl SExp {
                 panic!("ERROR: Not boolean type {self:?}");
             }
         }
+    }
+}
+
+impl Display for SExp {
+    // Duplicated because of string iterpolation
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let sexp_str = match self {
+            Self::Id(id) => id.to_string(),
+            Self::Lambda(_) => "lambda".to_string(),
+            Self::Num(num) => num.to_string(),
+            Self::Sym(str) => format!("'{}'", str),
+            Self::Nil => String::from("()"),
+            Self::Op(op) => { format!("{}", op) },
+            Self::Cmp(cmp) => { format!("{}", cmp) },
+            Self::Bool(b) => {
+                if *b {
+                    String::from("true")
+                } else {
+                    String::from("false")
+                }
+            }
+            lst if lst.is_list() => {
+                String::from("(")
+                    + lst
+                        .get_list_vec()
+                        .iter()
+                        .map(|l| format!("{}", l) )
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .as_str()
+                    + String::from(")").as_str()
+            },
+            _ => {
+                panic!("not stringable {self:?}")
+            }
+        };
+        write!(f, "{}", sexp_str)
     }
 }
 
@@ -547,7 +614,7 @@ impl EvalEnvironment {
                         Some(arg_name) if rhs_ptr.is_list() => {
                         let call_arg = rhs_ptr.get_car();
                             let arg_val = self.eval_expr(call_arg, loc_env);
-                            println!("Arg {arg_name:?} -> {val:?}", val=arg_val);
+                            debug_log!("Arg {arg_name} -> {val}", val=arg_val);
                             rhs_ptr = rhs_ptr.get_cdr();
                         }
                         None if rhs_ptr.is_nil() => {
@@ -581,7 +648,7 @@ impl EvalEnvironment {
                         Some(arg_name) if rhs_ptr.is_list() => {
                             let call_arg = rhs_ptr.get_car();
                             let arg_val = self.eval_expr(call_arg, loc_env);
-                            println!("Arg {arg_name:?} -> {val:?}", arg_name=arg_name.get_id(), val=arg_val);
+                            debug_log!("Arg {arg_name} -> {val}", arg_name=arg_name.get_id(), val=arg_val);
                             loc_env.loc_env.insert(arg_name.get_id(), arg_val.clone());
                             rhs_ptr = rhs_ptr.get_cdr();
                         }
@@ -602,7 +669,7 @@ impl EvalEnvironment {
     }
 
     pub fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
-        debug_log!("{expr:#?}");
+        debug_log!("Eval: {expr}");
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
                 SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
@@ -663,10 +730,6 @@ impl EvalEnvironment {
         acc: Option<SExp>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
-        if acc.is_none() {
-            // println!("Eval: {op:?} -> {expr:?}");
-        }
-
         match expr {
             SExp::Nil => SExp::Bool(true),
             _ => {
@@ -693,7 +756,7 @@ impl EvalEnvironment {
         acc: Option<SExp>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
-        // println!("Evaling exp {expr:?}");
+        // debug_log!("Evaling exp {expr}");
         match id.get_id().as_str() {
             "list" => {
                 match expr {
@@ -986,10 +1049,14 @@ impl EvalEnvironment {
                 }
             },
             var if self.has_var(var) => {
-                return self.get_var(var).clone();
+                let val=self.get_var(var).clone();
+                debug_log!("{var} -> {val}");
+                return val;
             }
             var if loc_env.loc_env.contains_key(var) => {
-                return loc_env.loc_env.get(var).unwrap().clone();
+                let val=loc_env.loc_env.get(var).unwrap().clone();
+                debug_log!("loc: {var} -> {val}");
+                return val;
             }
             met if self.has_met(met) => {
                 let func = self.get_met(met).clone();

@@ -36,11 +36,11 @@ fn main() -> Result<()> {
 
     debug_log!("Expressions:");
     for expr in parser.expressions_iterator() {
-        debug_log!("\n-> {expr:?}\n");
+        debug_log!("\n-> {expr}\n");
         let mut loc_env: LocalEnv = LocalEnv::new();
         let result = env.eval_expr(expr, &mut loc_env);
         println!("{res}", res=result.as_string());
-        debug_log!("ENV: {env:?}");
+        // debug_log!("ENV: {env:?}");
     }
 
     Ok(())

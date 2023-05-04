@@ -6,11 +6,11 @@
 
 (if (= "tert" "test") (println "it is true") (println "it is a lie"))
 
-(do (println "foo") (println "bar" "baz") (join 1 2 3))
+(do (println "foo") (println "bar" "baz") (concat 1 2 3))
 
 
-(define (loop f t)
-    (if (< f t)
-        (loop (+ f 1) t)))
-
-(loop 1 10)
+;; (define (loop f t)
+;;     (if (< f t)
+;;         (loop (+ f 1) t)))
+;;
+;; (loop 1 10)

@@ -1,9 +1,52 @@
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fs;
+use std::env;
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
+
+macro_rules! debug_log {
+    ($($arg:tt)*)=> {
+        match env::var("JOPA_TRACE") {
+            Ok(v) if v == "1" => println!($($arg)*),
+            _ => {}
+        }
+    };
+}
+
+fn main() {
+    let args = std::env::args();
+    let arguments = args.collect::<Vec<_>>();
+
+    let file_path = &arguments[1];
+    println!("Reading '{file_path}'");
+    let content = fs::read_to_string(file_path).expect("Cant read file content");
+    println!(
+        "Source:\n--------\n{content}\n----------",
+        content = content.trim()
+    );
+    let chars = content.chars().into_iter().collect::<Vec<_>>();
+    let mut lexer = Lexer { input: &chars };
+    let tokens = lexer.parse();
+    debug_log!("Tokens: #{tokens:?}");
+    debug_log!("------------");
+    let mut parser = Parser::new(tokens);
+    parser.parse_tokens();
+
+    let mut env = EvalEnvironment::new();
+
+    println!("Expressions:");
+    for expr in parser.sexprs.iter() {
+        debug_log!("\n-> {expr:?}\n");
+        let mut loc_env: LocalEnv = LocalEnv::new();
+        let result = env.eval_expr(expr, &mut loc_env);
+        println!("{v}", v=format!("Result: {result:?}"));
+        debug_log!("ENV: {env:?}");
+    }
+}
+
+
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum Token {
@@ -234,12 +277,12 @@ impl SExp {
             Self::Cons { car, cdr } => {
                 if *cdr == SExp::Nil {
                     Self::Cons {
-                        car: car,
+                        car,
                         cdr: Box::new(Self::new_list(other)),
                     }
                 } else {
                     Self::Cons {
-                        car: car,
+                        car,
                         cdr: Box::new(cdr.append_to_list(other)),
                     }
                 }
@@ -363,7 +406,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: Vec<Token>) -> Self {
         return Parser {
-            tokens: tokens,
+            tokens,
             sexprs: Vec::new(),
             stack: Vec::new(),
             lambda_count: 0,
@@ -509,18 +552,18 @@ impl EvalEnvironment {
                 car: met_name,
                 cdr: args,
             } => {
-                let name = met_name.get_id().as_ref();
-                println!("prox: {args:?}");
-                if (self.has_met(name)) {
-                     let args_exprs = self.get_var(name).get_list_vec();
-                }
+                // let name = met_name.get_id().as_ref();
+                // println!("prox: {args:?}");
+                // if self.has_met(name) {
+                //      let args_exprs = self.get_var(name).get_list_vec();
+                // }
                 let args_exprs = args.get_list_vec();
                 let mut args_iter = args_exprs.into_iter();
                 let mut rhs_ptr = args.as_ref();
                 loop {
                     match args_iter.next() {
                         Some(arg_name) if rhs_ptr.is_list() => {
-                            let call_arg = rhs_ptr.get_car();
+                        let call_arg = rhs_ptr.get_car();
                             let arg_val = self.eval_expr(call_arg, loc_env);
                             println!("Arg {arg_name:?} -> {val:?}", val=arg_val);
                             rhs_ptr = rhs_ptr.get_cdr();
@@ -577,7 +620,7 @@ impl EvalEnvironment {
     }
 
     fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
-        pretty_print_list(expr, 0);
+        debug_log!("{expr:#?}");
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
                 SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
@@ -1005,49 +1048,19 @@ impl EvalEnvironment {
     }
 }
 
-fn main() {
-    let args = std::env::args();
-    let arguments = args.collect::<Vec<_>>();
-
-    let file_path = &arguments[1];
-    println!("Reading '{file_path}'");
-    let content = fs::read_to_string(file_path).expect("Cant read file content");
-    println!(
-        "Source:\n--------\n{content}\n----------",
-        content = content.trim()
-    );
-    let chars = content.chars().into_iter().collect::<Vec<_>>();
-    let mut lexer = Lexer { input: &chars };
-    let tokens = lexer.parse();
-    println!("Tokens: #{tokens:?}");
-    println!("------------");
-    let mut parser = Parser::new(tokens);
-    parser.parse_tokens();
-
-    let mut env = EvalEnvironment::new();
-
-    println!("Expressions:");
-    for expr in parser.sexprs.iter() {
-        println!("\n-> {expr:?}\n");
-        let mut loc_env: LocalEnv = LocalEnv::new();
-        let result = env.eval_expr(expr, &mut loc_env);
-        println!("Result: {result:?}");
-        println!("ENV: {env:?}");
-    }
-}
-
 #[allow(dead_code)]
 fn pretty_print_list(list: &SExp, level: usize) {
-    let cis = std::iter::repeat("    ").take(level).collect::<String>();
-    match list {
-        SExp::Cons { car, cdr } => {
-            println!("{cis}Cons: {{");
-            pretty_print_list(car, level + 1);
-            pretty_print_list(cdr, level + 1);
-            println!("{cis}}}");
-        }
-        any => {
-            println!("{cis}{any:?}");
-        }
-    }
+    println!("{list:#?}");
+    // let cis = std::iter::repeat("    ").take(level).collect::<String>();
+    // match list {
+    //     SExp::Cons { car, cdr } => {
+    //         println!("{cis}Cons: {{");
+    //         pretty_print_list(car, level + 1);
+    //         pretty_print_list(cdr, level + 1);
+    //         println!("{cis}}}");
+    //     }
+    //     any => {
+    //         println!("{cis}{any:?}");
+    //     }
+    // }
 }

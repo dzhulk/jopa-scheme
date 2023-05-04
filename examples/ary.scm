@@ -1,7 +1,5 @@
 
-(define (say)
+(define (say name last th)
   (println "Hello funck!"))
 
-
-(if (= 1 1) (say))
 

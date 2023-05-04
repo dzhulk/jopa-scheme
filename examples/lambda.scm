@@ -1,9 +1,11 @@
 (define (adder n)
   (lambda (i) (+ n i)))
 
-(define add3 (adder (+ 1 1)))
+;; ((lambda (i) (+ 1 i)) 2)
 
+(define add3 (adder (+ 1 4)))
 
+;; (println i)
 
 ;; (println ((lambda (i) (+ 2 i)) 3))
 ;; (println add3)

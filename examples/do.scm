@@ -1,14 +1,8 @@
-(do
-    (println "foo")
-    (println "bar" "baz")
-    (concat 1 2 3))
 
+;; // TODO: detect cyclic references
+;; //
+(define (say name) (println name))
 
-(define (loop f t)
-    (if (< f t)
-        (do
-            (println f)
-            (loop (+ f 1) t))))
+;; (say name) cyclic example
 
-(loop 1 10)
-
+(say "hello")

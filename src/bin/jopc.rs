@@ -1,11 +1,10 @@
 use jop::*;
 
-use anyhow::{Result, Context, bail};
+use anyhow::{bail, Context, Result};
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
-use std::fs;
 use std::env;
-
+use std::fs;
 
 fn main() -> Result<()> {
     let args = std::env::args();
@@ -25,24 +24,23 @@ fn main() -> Result<()> {
     let mut lexer = Lexer::new(chars);
     let tokens = match lexer.parse().context("Tokenization error") {
         Ok(t) => t,
-        err   => bail!("Tokenization failed: {err:?}")
+        err => bail!("Tokenization failed: {err:?}"),
     };
 
     let mut parser = Parser::new(tokens);
     match parser.parse_tokens() {
         Ok(t) => t,
-        err   => bail!("AST parsing failed: {err:?}")
+        err => bail!("AST parsing failed: {err:?}"),
     }
 
     debug_log!("Expressions:");
+    let mut loc_env: LocalEnv = LocalEnv::new();
     for expr in parser.expressions_iterator() {
         debug_log!("\n-> {expr}\n");
-        let mut loc_env: LocalEnv = LocalEnv::new();
         let result = env.eval_expr(expr, &mut loc_env);
-        println!("{res}", res=result.as_string());
-        // debug_log!("ENV: {env:?}");
+        println!("{res}", res = result.as_string());
+        debug_log!("ENV: {loc_env:?}");
     }
 
     Ok(())
 }
-

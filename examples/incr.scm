@@ -1,17 +1,8 @@
-# (println (fib 10))
 
-# (println "name" name)
-# (println "name" (name))
-
-(= (+ 2 3 (- 10 5)) 10)
+;; (= (+ 2 3 (- 10 5)) 10)
 (= (- 8 1 1 1) 5)
 (= (* 12 12 12) 1728)
 (= (> 9 7 6 4 3))
-#(< 1 2 3 )
-#(= 1 1 1 2)
-#(= 1 1 1 )
-#(> "test" "test" "test")
-#(<= 1 1 1 2)
 
 (if (= "tert" "test") (println "it is true") (println "it is a lie"))
 

@@ -2,10 +2,10 @@ use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fs;
 
-const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', ';'];
+const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
 
-#[derive(Debug, PartialEq, Eq,Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum Token {
     LPar,
     RPar,
@@ -78,7 +78,7 @@ impl<'a> Lexer<'a> {
                     tokens.push(Token::Str(self.chop_while(|ch| ch != '"')));
                     self.next();
                 }
-                '#' => {
+                ';' => {
                     self.next();
                     self.chop_while(|ch| ch != '\n');
                     self.next();
@@ -352,12 +352,11 @@ impl SExp {
     }
 }
 
-
-
 #[derive(Debug)]
 struct Parser {
     tokens: Vec<Token>,
     sexprs: Vec<SExp>,
+    stack: Vec<SExp>,
     lambda_count: i32, // should be global
 }
 
@@ -366,6 +365,7 @@ impl Parser {
         return Parser {
             tokens: tokens,
             sexprs: Vec::new(),
+            stack: Vec::new(),
             lambda_count: 0,
         };
     }
@@ -374,33 +374,40 @@ impl Parser {
         self.tokens = self.tokens.drain(n..).collect();
     }
 
+    fn peek_token(&self) -> Token {
+        (self.tokens[0]).clone()
+    }
+
     fn parse_tokens(&mut self) {
         let mut stack: Vec<SExp> = Vec::new();
 
         while !self.tokens.is_empty() {
-            let token = &(self.tokens[0]).clone();
-            match token {
+            match self.peek_token() {
                 Token::LPar => {
-                    stack.push(SExp::new_list(self.parse_sexp(&(self.tokens[1]).clone())));
-                    self.drop_tokens(2);
+                    self.drop_tokens(1);
+                    let mut token = self.peek_token();
+                    if token == Token::LPar {
+                        self.drop_tokens(1);
+                        token = self.peek_token();
+                        stack.push(SExp::Nil);
+                    }
+                    stack.push(SExp::new_list(self.parse_sexp(&token)));
+                    self.drop_tokens(1);
                 }
                 Token::RPar => {
+                    self.drop_tokens(1);
                     if stack.len() == 1 {
-                        self.drop_tokens(1);
                         self.sexprs.push(stack.pop().unwrap());
                     } else {
                         let curr_sexp = stack.pop().unwrap();
                         let parent = stack.pop().unwrap();
                         let new_list = parent.append_to_list(curr_sexp);
                         stack.push(new_list);
-                        self.drop_tokens(1);
                     }
                 }
                 Token::Sym(_) | Token::Str(_) | Token::Op(_) | Token::Num(_) => {
-                    let new_list = stack
-                        .pop()
-                        .unwrap()
-                        .append_to_list(self.parse_sexp(&(self.tokens[0]).clone()));
+                    let token = self.peek_token();
+                    let new_list = stack.pop().unwrap().append_to_list(self.parse_sexp(&token));
                     stack.push(new_list);
                     self.drop_tokens(1);
                 }
@@ -422,7 +429,8 @@ impl Parser {
             Token::Op(str) => match EvMat::from_string(str) {
                 Some(op) => SExp::Op(op),
                 None => {
-                    let cmp = EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
+                    let cmp =
+                        EvCmp::from_string(str).expect(format!("Can't parse Op {str}").as_str());
                     SExp::Cmp(cmp)
                 }
             },
@@ -443,17 +451,17 @@ type EnvTable = HashMap<String, SExp>;
 #[derive(Debug)]
 struct LocalEnv {
     loc_env: EnvTable,
+    lam_env: EnvTable,
 }
 
 impl LocalEnv {
     fn new() -> Self {
         return LocalEnv {
-            loc_env: HashMap::new()
+            loc_env: EnvTable::new(),
+            lam_env: EnvTable::new(),
         };
     }
 }
-
-
 
 #[derive(Debug)]
 struct EvalEnvironment {
@@ -495,20 +503,81 @@ impl EvalEnvironment {
         self.met_table.get(name).unwrap()
     }
 
-    fn eval_lambda(&mut self, lambda_id: i32, expr: &SExp, loc_env: &mut EnvTable) ->SExp {
-        // generate random uuid on parsing state
-        // transform lambda to regular meth to local table
-        // return it as new SExp::Id() with random uuid
-        // treat it as Id
-        // but it will lose all localtable data
-
-
-        return SExp::Cons { car: Box::new(SExp::Id(lambda_id.to_string())), cdr: Box::new(expr.clone()) };
+    fn eval_lambda_proxy(&mut self, lambda: &SExp, rhs: &SExp, loc_env: &mut LocalEnv) -> SExp {
+        match lambda {
+            SExp::Cons {
+                car: met_name,
+                cdr: args,
+            } => {
+                let name = met_name.get_id().as_ref();
+                println!("prox: {args:?}");
+                if (self.has_met(name)) {
+                     let args_exprs = self.get_var(name).get_list_vec();
+                }
+                let args_exprs = args.get_list_vec();
+                let mut args_iter = args_exprs.into_iter();
+                let mut rhs_ptr = args.as_ref();
+                loop {
+                    match args_iter.next() {
+                        Some(arg_name) if rhs_ptr.is_list() => {
+                            let call_arg = rhs_ptr.get_car();
+                            let arg_val = self.eval_expr(call_arg, loc_env);
+                            println!("Arg {arg_name:?} -> {val:?}", val=arg_val);
+                            rhs_ptr = rhs_ptr.get_cdr();
+                        }
+                        None if rhs_ptr.is_nil() => {
+                            break;
+                        }
+                        _ => {
+                            panic!("ERROR: argumes arity don't match for lambda");
+                        }
+                    }
+                }
+                return self.eval_expr(&SExp::Nil, loc_env);
+            }
+            _ => {
+                panic!("Lambda error")
+            }
+        }
     }
 
 
+    fn eval_lambda(&mut self, lambda: &SExp, rhs: &SExp, loc_env: &mut LocalEnv) -> SExp {
+        match lambda.get_cdr() {
+            SExp::Cons {
+                car: args,
+                cdr: body,
+            } => {
+                let args_exprs = args.get_list_vec();
+                let mut args_iter = args_exprs.into_iter();
+                let mut rhs_ptr = rhs;
+                loop {
+                    match args_iter.next() {
+                        Some(arg_name) if rhs_ptr.is_list() => {
+                            let call_arg = rhs_ptr.get_car();
+                            let arg_val = self.eval_expr(call_arg, loc_env);
+                            println!("Arg {arg_name:?} -> {val:?}", arg_name=arg_name.get_id(), val=arg_val);
+                            loc_env.loc_env.insert(arg_name.get_id(), arg_val.clone());
+                            rhs_ptr = rhs_ptr.get_cdr();
+                        }
+                        None if rhs_ptr.is_nil() => {
+                            break;
+                        }
+                        _ => {
+                            panic!("ERROR: argumes arity don't match for lambda");
+                        }
+                    }
+                }
+                return self.eval_expr(body.get_car(), loc_env);
+            }
+            _ => {
+                panic!("Lambda error")
+            }
+        }
+    }
+
     fn eval_expr(&mut self, expr: &SExp, loc_env: &mut LocalEnv) -> SExp {
-        // pretty_print_list(expr, 0);
+        pretty_print_list(expr, 0);
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
                 SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
@@ -517,7 +586,19 @@ impl EvalEnvironment {
                 SExp::Num(num) => SExp::Num(*num),
                 SExp::Sym(sym) => SExp::Sym(sym.to_string()),
                 SExp::Bool(b) => SExp::Bool(*b),
-                // SExp::Lambda(id) => self.eval_lambda(*id, cdr, loc_env),
+                // SExp::Lambda(_) => self.eval_lambda(expr, loc_env),
+                SExp::Cons {
+                    car: lam,
+                    cdr: _,
+                } if lam.is_lambda() => {
+                    self.eval_lambda(car, &cdr, loc_env)
+                },
+                SExp::Cons {
+                    car: id,
+                    cdr: _,
+                } if id.is_id() => {
+                    self.eval_lambda_proxy(car, &cdr, loc_env)
+                },
                 SExp::Nil => SExp::Nil,
                 _ => {
                     panic!("ERROR: can't match eval expr car: {car:?}");
@@ -951,7 +1032,7 @@ fn main() {
         let mut loc_env: LocalEnv = LocalEnv::new();
         let result = env.eval_expr(expr, &mut loc_env);
         println!("Result: {result:?}");
-        // println!("ENV: {env:?}");
+        println!("ENV: {env:?}");
     }
 }
 

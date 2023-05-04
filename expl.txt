@@ -63,14 +63,30 @@ Cons(define, nil)
 
 (define (incr arg) (+ arg 1))
 
-
-(if (= a b) (println "it is true") (println "it is a lie!"))
+((lambda (a) (+ 1 a)) 1)
 
 Cons(
-    ID(if),
     Cons(
+        lambda,
         Cons(
+            Cons(
+               "a",
+               Nil
+            ),
+            Cons(
+                Cons(
+                   "+",
+                   Cons(,
 
-        )
+                        Cons(
+                            "a",
+                            NIl
+                        )
+                    )
+                ),
+                Nil
+            )
+        ),
+      )
+      1
     )
-)

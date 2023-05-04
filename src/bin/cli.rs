@@ -5,7 +5,6 @@ use rustyline::{DefaultEditor, Result};
 
 fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
-    #[cfg(feature = "with-file-history")]
     if rl.load_history("history.txt").is_err() {
         println!("No previous history.");
     }
@@ -20,7 +19,7 @@ fn main() -> Result<()> {
                 execute_line(&mut env, line);
             },
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
+                println!("Bye!");
                 break
             },
             Err(ReadlineError::Eof) => {
@@ -33,7 +32,6 @@ fn main() -> Result<()> {
             }
         }
     }
-    #[cfg(feature = "with-file-history")]
     rl.save_history("history.txt");
     Ok(())
 }

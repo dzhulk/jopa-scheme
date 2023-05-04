@@ -809,7 +809,7 @@ impl EvalEnvironment {
         }
         match expr {
             SExp::Cons { car, cdr } => match car.as_ref() {
-                SExp::Id(_) => self.eval_func(car, cdr, None, loc_env),
+                SExp::Id(_) => self.eval_func(car, cdr, None, loc_env::create_child()),
                 SExp::Op(s) => self.eval_mat(s, cdr, None, loc_env),
                 SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_env),
                 SExp::Num(num) => SExp::Num(*num),
@@ -1203,6 +1203,7 @@ impl EvalEnvironment {
                     arg_table: EnvTable::new(),
                     parent_env: None,
                 };
+
                 // TODO: detect cyclic references
                 //
                 if let Some(args) = loc_env.get_args(met) {

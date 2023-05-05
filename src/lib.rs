@@ -99,7 +99,6 @@ impl Lexer {
                     self.chop();
                 }
                 any => {
-                    println!();
                     return Err(anyhow!("Unknown symbol {any}"));
                 }
             };
@@ -707,69 +706,21 @@ impl EvalEnvironment {
         return EvalEnvironment {};
     }
 
-    fn eval_lambda_proxy(&mut self, lambda: &SExp, rhs: &SExp, loc_env: &mut LocalEnv) -> SExp {
-        match lambda {
-            SExp::Cons {
-                car: met_name, // Lambda
-                cdr: args_and_body,
-            } => {
-                println!("LAM_PROX lam {lambda}");
-                println!("LAM_PROX rhs {rhs}");
-                println!("LAM_PROX loc_env {loc_env:?}");
-                // loc_env.loc_env
-                // args already resolved
-                // let args_exprs = args.get_list_vec();
-                // let mut args_iter = args_exprs.into_iter();
-                // let mut rhs_ptr = args.as_ref();
-                // loop {
-                //     match args_iter.next() {
-                //         Some(arg_name) if rhs_ptr.is_list() => {
-                //             let call_arg = rhs_ptr.get_car();
-                //             let arg_val = self.eval_expr(call_arg, loc_env);
-                //             debug_log!("Arg {arg_name} -> {val}", val = arg_val);
-                //             rhs_ptr = rhs_ptr.get_cdr();
-                //         }
-                //         None if rhs_ptr.is_nil() => {
-                //             break;
-                //         }
-                //         _ => {
-                //             panic!("ERROR: argumes arity don't match for lambda");
-                //         }
-                //     }
-                // }
-                // return self.eval_expr(&SExp::Nil, loc_env);
-                SExp::Nil
-            }
-            _ => {
-                panic!("Lambda error")
-            }
-        }
-    }
-
     fn eval_lambda(&mut self, lambda: &SExp, rhs: &SExp, loc_env: &mut LocalEnv) -> SExp {
         match lambda.get_cdr() {
             SExp::Cons {
                 car: args,
                 cdr: body,
             } => {
-                println!("env in lam: {loc_env:?}");
-                println!("rhs in lam: {rhs:?}");
-                let lambda_captured_args = match loc_env.lam_env.get(lambda) {
-                    Some(capt) => {
-                        let v = capt.get_list_vec();
-                        println!("vec: {v:?}");
-
-                        for e in v.iter() {
-                            loc_env
-                                .loc_env
-                                .insert(e.get_car().get_id(), e.get_cdr().clone());
-                        }
-
-                        ()
+                if let Some(capt) =loc_env.lam_env.get(lambda) {
+                    debug_log!("lookup in env: {capt:?}");
+                    for e in capt.get_list_vec().iter() {
+                        loc_env
+                            .loc_env
+                            .insert(e.get_car().get_id(), e.get_cdr().clone());
                     }
-                    _ => {}
-                };
-                println!("look up in env: {l:?}", l = lambda_captured_args);
+
+                }
                 let args_exprs = args.get_list_vec();
                 let mut args_iter = args_exprs.into_iter();
                 let mut rhs_ptr = rhs;
@@ -798,7 +749,7 @@ impl EvalEnvironment {
                 return self.eval_expr(body.get_car(), loc_env);
             }
             _ => {
-                panic!("Lambda error")
+                panic!("Not Lambda {lambda}")
             }
         }
     }
@@ -815,16 +766,10 @@ impl EvalEnvironment {
                 SExp::Num(num) => SExp::Num(*num),
                 SExp::Sym(sym) => SExp::Sym(sym.to_string()),
                 SExp::Bool(b) => SExp::Bool(*b),
-                SExp::Lambda(_) => {
-                    println!("Returning lambda body");
-                    expr.clone()
-                }
+                SExp::Lambda(_) => { expr.clone() } // don't remember why
                 SExp::Cons { car: lam, cdr: _ } if lam.is_lambda() => {
                     self.eval_lambda(car, &cdr, loc_env)
                 }
-                // SExp::Cons { car: id, cdr: _ } if id.is_id() => {
-                //     self.eval_lambda_proxy(car, &cdr, loc_env)
-                // }
                 SExp::Nil => SExp::Nil,
                 _ => {
                     panic!("ERROR: can't match eval expr car: {car:?}");

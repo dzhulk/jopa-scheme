@@ -1,4 +1,4 @@
-Simple scheme like lang
+## Simple scheme like lang
 
 How to run:
 ```bash
@@ -30,7 +30,7 @@ define - define function or variable
 list   - construct new list (list 1 2 3)
 ```
 
-#Some examples
+## Some examples
 map:
 ```scheme
 (define (map-in fn lst acc)
@@ -75,4 +75,3 @@ Fibonacci:
 
 (fib 20)
 ```
-

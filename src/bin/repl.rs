@@ -11,13 +11,14 @@ fn main() -> Result<()> {
     }
 
     let mut env = EvalEnvironment::new();
+    let mut loc_env: LocalEnv = LocalEnv::new();
 
     loop {
         let readline = rl.readline("jop=> ");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str()).unwrap();
-                let res = execute_line(&mut env, line);
+                let res = execute_line(&mut env, &mut loc_env, line);
                 match res {
                     Err(err) => {
                         println!("Error occured:\n\t{err}")
@@ -43,7 +44,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn execute_line(env: &mut EvalEnvironment, line: String) -> Result<()> {
+fn execute_line(env: &mut EvalEnvironment, loc_env: &mut LocalEnv, line: String) -> Result<()> {
     let chars = line.chars().into_iter().collect::<Vec<_>>();
     let mut lexer = Lexer::new(chars);
     let tokens = match lexer.parse().context("Tokenization error") {
@@ -58,10 +59,9 @@ fn execute_line(env: &mut EvalEnvironment, line: String) -> Result<()> {
     }
 
     debug_log!("Expressions:");
-    let mut loc_env: LocalEnv = LocalEnv::new();
     for expr in parser.expressions_iterator() {
         debug_log!("\n-> {expr}\n");
-        let result = env.eval_expr(expr, &mut loc_env);
+        let result = env.eval_expr(expr, loc_env);
         println!("{res}", res = result.as_string());
         debug_log!("ENV: {env:?}");
     }

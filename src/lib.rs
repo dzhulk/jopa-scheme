@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::rc::Rc;
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
@@ -209,7 +210,6 @@ pub enum SExp {
     Sym(String),
     Num(i32),
     Bool(bool),
-    Quote,
     Cons { car: Box<SExp>, cdr: Box<SExp> },
     Nil,
 }
@@ -526,7 +526,6 @@ impl Parser {
         match token {
             Token::Sym(str) => match str.as_str() {
                 "lambda" => SExp::Lambda(self.next_lambda_id()),
-                "quote" => SExp::Quote,
                 "nil" => SExp::Nil,
                 "true" => SExp::Bool(true),
                 "false" => SExp::Bool(false),
@@ -554,8 +553,6 @@ impl Parser {
     }
 }
 
-use std::cell::RefCell;
-use std::rc::Rc;
 
 type EnvTable = HashMap<String, SExp>;
 type LamTable = HashMap<SExp, SExp>;

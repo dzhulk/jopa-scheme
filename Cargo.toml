@@ -7,7 +7,7 @@ edition = "2021"
 # Some dump comment
 
 [dependencies]
-rustyline = {version="11.0.0", deafult-features=true}
+rustyline = { version="11.0.0" }
 anyhow = { version = "1.0" }
 
 [lib]

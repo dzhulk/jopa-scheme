@@ -1,9 +1,6 @@
 use jop::*;
 
 use anyhow::{bail, Context, Result};
-use std::cmp::{Eq, PartialEq};
-use std::collections::HashMap;
-use std::env;
 use std::fs;
 
 fn main() -> Result<()> {

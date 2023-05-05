@@ -20,9 +20,7 @@
 (define (reverse l)
   (if (nil? l)
     nil
-    (append (reverse (cdr l)) (list (car l)))
-  )
-)
+    (append (reverse (cdr l)) (list (car l)))))
 
 (println (reverse (list 1 2 3 4 5)))
 

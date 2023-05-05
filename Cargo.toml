@@ -15,8 +15,8 @@ name = "jop"           # The name of the target.
 path = "src/lib.rs"    # The source file of the target.
 
 [[bin]]
-name = "cli"
-path = "src/bin/cli.rs"
+name = "repl"
+path = "src/bin/repl.rs"
 
 [[bin]]
 name = "jopc"

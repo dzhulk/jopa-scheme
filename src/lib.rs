@@ -614,7 +614,6 @@ impl<'a> LocalEnv<'a> {
         }
     }
 
-
     fn has_met(&self, name: &str) -> bool {
         if self.met_table.contains_key(name) {
             true
@@ -648,7 +647,7 @@ impl<'a> LocalEnv<'a> {
                 match parent_opt {
                     Some(parent) => {
                         if parent.loc_env.contains_key(name) {
-                            return parent.loc_env.get(name).unwrap()
+                            return parent.loc_env.get(name).unwrap();
                         }
                         parent_opt = &parent.parent_env;
                     }
@@ -668,7 +667,7 @@ impl<'a> LocalEnv<'a> {
                 match parent_opt {
                     Some(parent) => {
                         if parent.arg_table.contains_key(name) {
-                            return parent.arg_table.get(name)
+                            return parent.arg_table.get(name);
                         }
                         parent_opt = &parent.parent_env;
                     }
@@ -688,7 +687,7 @@ impl<'a> LocalEnv<'a> {
                 match parent_opt {
                     Some(parent) => {
                         if parent.met_table.contains_key(name) {
-                            return parent.met_table.get(name).unwrap()
+                            return parent.met_table.get(name).unwrap();
                         }
                         parent_opt = &parent.parent_env;
                     }
@@ -701,13 +700,11 @@ impl<'a> LocalEnv<'a> {
 }
 
 #[derive(Debug)]
-pub struct EvalEnvironment {
-}
+pub struct EvalEnvironment {}
 
 impl EvalEnvironment {
     pub fn new() -> Self {
-        return EvalEnvironment {
-        };
+        return EvalEnvironment {};
     }
 
     fn eval_lambda_proxy(&mut self, lambda: &SExp, rhs: &SExp, loc_env: &mut LocalEnv) -> SExp {
@@ -763,15 +760,16 @@ impl EvalEnvironment {
                         println!("vec: {v:?}");
 
                         for e in v.iter() {
-                            loc_env.loc_env.insert(e.get_car().get_id(), e.get_cdr().clone());
+                            loc_env
+                                .loc_env
+                                .insert(e.get_car().get_id(), e.get_cdr().clone());
                         }
 
                         ()
-                    },
+                    }
                     _ => {}
-
                 };
-                println!("look up in env: {l:?}", l=lambda_captured_args);
+                println!("look up in env: {l:?}", l = lambda_captured_args);
                 let args_exprs = args.get_list_vec();
                 let mut args_iter = args_exprs.into_iter();
                 let mut rhs_ptr = rhs;
@@ -892,7 +890,7 @@ impl EvalEnvironment {
         acc: Option<SExp>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
-        debug_log!("Evaling exp {expr:?}");
+        debug_log!("Evaling exp {expr}");
         match id.get_id().as_str() {
             "list" => {
                 match expr {
@@ -994,11 +992,10 @@ impl EvalEnvironment {
             "nil?" => {
                 match expr {
                     SExp::Nil => {
-                        panic!("Nil? takes 1 arg")
+                        panic!("nil? takes 1 arg")
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
                         let mut lhs = self.eval_expr(car, loc_env);
-                        // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
                             lhs = self.eval_expr(&lhs, loc_env);
                         }
@@ -1009,7 +1006,7 @@ impl EvalEnvironment {
                         }
                     }
                     _ => {
-                        panic!("Can't parse 'isnil' {expr:?}");
+                        panic!("Can't parse 'nil?' {expr:?}");
                     }
                 };
             }
@@ -1020,7 +1017,6 @@ impl EvalEnvironment {
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
                         let mut lhs = self.eval_expr(car, loc_env);
-                        // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
                             lhs = self.eval_expr(&lhs, loc_env);
                         }
@@ -1032,6 +1028,28 @@ impl EvalEnvironment {
                     }
                     _ => {
                         panic!("Can't parse 'cdr' {expr:?}");
+                    }
+                };
+            }
+            "not" => {
+                match expr {
+                    SExp::Nil => {
+                        panic!("'not' expects 1 argument")
+                    }
+                    SExp::Cons { car, cdr } if cdr.is_nil() => {
+                        let mut lhs = self.eval_expr(car, loc_env);
+                        while lhs.is_id() {
+                            lhs = self.eval_expr(&lhs, loc_env);
+                        }
+                        match lhs {
+                            SExp::Bool(b) => return SExp::Bool(!b),
+                            _ => {
+                                panic!("'not' expects bool arg: {expr:?}");
+                            }
+                        }
+                    }
+                    _ => {
+                        panic!("Can't parse 'not' {expr:?}");
                     }
                 };
             }
@@ -1080,7 +1098,6 @@ impl EvalEnvironment {
                     }
                     SExp::Cons { car, cdr } if cdr.is_nil() => {
                         let mut lhs = self.eval_expr(car, loc_env);
-                        // println!("lhs: {lhs:?}");
                         while lhs.is_id() {
                             lhs = self.eval_expr(&lhs, loc_env);
                         }
@@ -1092,6 +1109,30 @@ impl EvalEnvironment {
                     }
                     _ => {
                         panic!("Can't parse 'car' {expr:?}");
+                    }
+                };
+            }
+            "conj" => {
+                match expr {
+                    SExp::Nil => return acc.unwrap(),
+                    SExp::Cons { car, cdr } => {
+                        let len = expr.get_list_vec().len();
+                        if len > 2 {
+                            panic!("Conj takes only 2 arguments: {expr:?}");
+                        }
+
+                        let first = self.eval_expr(car, loc_env);
+                        // we know there are only two args, so seconds
+                        // only should have car
+                        let second = self.eval_expr(cdr.get_car(), loc_env);
+                        if second.is_list() || second.is_nil() {
+                            return second.append_to_list(first);
+                        } else {
+                            return SExp::new_list(second).append_to_list(first);
+                        }
+                    }
+                    _ => {
+                        panic!("Can't parse 'cons' {expr:?}");
                     }
                 };
             }
@@ -1187,17 +1228,14 @@ impl EvalEnvironment {
             var if loc_env.has_var(var) => {
                 let val = loc_env.get_var(var).clone();
                 debug_log!("glob var: {var} -> {val}");
-                if val.is_list() && val.get_car().is_lambda() && !expr.is_nil(){
+                // Eval lambda only when it has call arguments
+                if val.is_list() && val.get_car().is_lambda() && !expr.is_nil() {
                     return self.eval_lambda(&val, &expr, loc_env);
                 }
                 return val;
             }
             met if loc_env.has_met(met) => {
-                // println!("met condition");
                 let func = loc_env.get_met(met).clone();
-                // println!("Got lambda body back: {func}");
-                // let new_loc_env = loc_env.create_child();
-
                 let mut new_loc_env = LocalEnv {
                     loc_env: EnvTable::new(),
                     lam_env: LamTable::new(),
@@ -1207,9 +1245,9 @@ impl EvalEnvironment {
                 };
 
                 // TODO: detect cyclic references
-                //
+                // TODO: top level lambda bubleup its arg, fix
                 if let Some(args) = loc_env.get_args(met) {
-                    println!("args: {args}");
+                    debug_log!("args: {args}");
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter = args_exprs.into_iter();
                     let mut expr_p = expr;
@@ -1217,15 +1255,12 @@ impl EvalEnvironment {
                         match args_iter.next() {
                             Some(arg_name) if expr_p.is_list() => {
                                 let call_arg = expr_p.get_car();
-                                println!("arg: {arg_name} -> {call_arg}");
+                                debug_log!("arg: {arg_name} -> {call_arg}");
                                 let arg_val = self.eval_expr(call_arg, loc_env);
-                                println!("arg evaled: {arg_name} -> {arg_val}");
+                                debug_log!("arg evaled: {arg_name} -> {arg_val}");
 
                                 if func.get_car().is_lambda() {
-                                    println!("^ arg for lambda");
-
-                                    // loc_env.loc_env.insert(arg_name.get_id(), arg_val);
-
+                                    debug_log!("^ arg for lambda");
                                     if loc_env.lam_env.contains_key(&func) {
                                         let new_list = new_loc_env
                                             .lam_env
@@ -1234,14 +1269,14 @@ impl EvalEnvironment {
                                             .append_to_list(SExp::new_pair(arg_name, arg_val));
                                         loc_env.lam_env.insert(func.clone(), new_list);
                                     } else {
-                                       loc_env
-                                           .lam_env
-                                            .insert(func.clone(), SExp::new_list(SExp::new_pair(arg_name, arg_val)));
+                                        loc_env.lam_env.insert(
+                                            func.clone(),
+                                            SExp::new_list(SExp::new_pair(arg_name, arg_val)),
+                                        );
                                     }
                                 } else {
                                     new_loc_env.loc_env.insert(arg_name.get_id(), arg_val);
                                 }
-
                                 expr_p = expr_p.get_cdr();
                             }
                             None if expr_p.is_nil() => {
@@ -1254,18 +1289,11 @@ impl EvalEnvironment {
                     }
                 }
 
-
-
                 if func.get_car().is_lambda() {
-                    println!("loc_env: {new_loc_env:?}");
-                    // self.eval_lambda_proxy(&func, &SExp::Nil, &mut new_loc_env);
-                    // return func;
+                    debug_log!("new loc_env: {new_loc_env:?}");
                 }
                 new_loc_env.set_parent(&loc_env);
-
-                let result = self.eval_expr(&func, &mut new_loc_env);
-                // debug_log!("Res: {result}");
-                return result;
+                return self.eval_expr(&func, &mut new_loc_env);
             }
             _ => {
                 panic!("Unknown {id:?}");

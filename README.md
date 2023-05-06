@@ -2,12 +2,12 @@
 
 How to run:
 ```bash
-cargo run --bin jopc -- examples/lambda.scm
+cargo run -p jopc -- examples/main.scm
 ```
 
 You can also run a REPL:
 ```bash
-cargo run --bin repl
+cargo run -p repl
 ```
 
 Built-ins:
@@ -87,11 +87,13 @@ Filter & reduce:
 
 (define (filter pred coll) (filteraux pred coll nil))
 
+(define nums (list 1 2 3 4 5 6 7 8 9 10))
+
 ;; select even elements
 (define even
   (filter
     (lambda (el) (= (% el 2) 0))
-    (list 1 2 3 4 5 6 7 8 9 10)))
+    nums))
 
 (println even)
 
@@ -101,5 +103,14 @@ Filter & reduce:
     (reduce fn (cdr coll) (fn (car coll) init))))
 
 ;; calculate list product
-(reduce (lambda (el acc) (* el acc)) (list 1 2 4 6  8 10) 1)
+(reduce (lambda (el acc) (* el acc)) nums 1)
+
+;; hof test
+(define (even? el) (= (% el 2) 0))
+
+(filter even? nums)
+
+(define odd? (lambda (el) (not (= (% el 2) 0))))
+
+(filter odd? nums)
 ```

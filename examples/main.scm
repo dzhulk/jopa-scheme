@@ -1,4 +1,3 @@
-
 (define (fizzbuzzaux n curr acc)
     (if (< curr n)
         (fizzbuzzaux n (+ curr 1)
@@ -68,7 +67,7 @@
 
 (filter even? nums)
 
-(define odd? (lambda (el) (not (= (% el 2) 0))))
+(define odd? (lambda (el) (not (even? el))))
 
 (filter odd? nums)
 

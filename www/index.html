@@ -1,21 +1,49 @@
 <!DOCTYPE  html>
 <html>
-  <head>
-    <meta  charset="utf-8">
-    <title>Jop lang!</title>
-  </head>
-  <body>
-    <script src="jopwas.js"></script>
+    <head>
+        <meta  charset="utf-8">
+        <title>Jop lang!</title>
+    </head>
+    <body>
+        <style>
+.code {
+    font-size: 16px;
+}
+        </style>
+        <script src="jopwas.js"></script>
+        <br/>
+        <input class=""
+        id="run"
+        type="button"
+        value="Run>"></input>
+        <br/>
+        <br/>
+        <div style="float:left;">
+            <textarea class="code" id="input" rows="38" cols="60"></textarea>
+        </div>
 
-    <script>
-      const { eval_jop } = wasm_bindgen;
+        <div style="float:left; margin-left: 40px;">
+            <textarea class="code" id="output" rows="38" cols="60"></textarea>
+        </div>
 
-      async function run() {
-        await wasm_bindgen();
-        let result = eval_jop('(cons "Hello" "user!")');
-        console.log(result);
-      }
-      run();
-    </script>
-  </body>
+        <script>
+            const { eval_jop } = wasm_bindgen;
+
+            var button = document.getElementById("run");
+
+            async function run() {
+                let content = document.getElementById("input").value
+                await wasm_bindgen();
+                let result = eval_jop(content);
+                document.getElementById("output").textContent = result;
+                button.disabled = "";
+            }
+
+            button.addEventListener("click",function(e){
+                button.disabled = "true";
+                run();
+            });
+
+        </script>
+    </body>
 </html>

@@ -1,0 +1,11 @@
+{
+  "name": "jopwas",
+  "version": "0.1.0",
+  "files": [
+    "jopwas_bg.wasm",
+    "jopwas.js",
+    "jopwas.d.ts"
+  ],
+  "browser": "jopwas.js",
+  "types": "jopwas.d.ts"
+}

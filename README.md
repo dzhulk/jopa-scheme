@@ -10,6 +10,13 @@ You can also run a REPL:
 cargo run -p repl
 ```
 
+wasm version:
+```bash
+cd www/
+./server.sh
+open http://localhost:8000/index.html
+```
+
 Built-ins:
 ```
 + - / *

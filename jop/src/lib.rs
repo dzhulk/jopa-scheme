@@ -587,107 +587,52 @@ impl<'a> LocalEnv<'a> {
         self.parent_env = Some(Rc::new(parent))
     }
 
-    fn has_var(&self, name: &str) -> bool {
-        if self.loc_env.contains_key(name) {
-            true
-        } else {
-            let mut parent_opt = &self.parent_env;
-            while parent_opt.is_some() {
-                match parent_opt {
-                    Some(parent) => {
-                        if parent.loc_env.contains_key(name) {
-                            return true;
-                        }
-                        parent_opt = &parent.parent_env;
-                    }
-                    _ => {}
-                }
-            }
-            false
+    fn lookup_env<'b>(&self, f: impl Fn(&LocalEnv) -> bool) -> Option<&'b LocalEnv> {
+        if f(&self) {
+            return Some(&self)
         }
+
+        let mut parent_opt = &self.parent_env;
+        while parent_opt.is_some() {
+            match parent_opt {
+                Some(parent) => {
+                    if f(parent) {
+                        return Some(parent);
+                    }
+                    parent_opt = &parent.parent_env;
+                }
+                _ => return None
+            }
+        }
+        None
+    }
+
+    fn has_var(&self, name: &str) -> bool {
+        self.lookup_env(|env| env.loc_env.contains_key(name) ).is_some()
     }
 
     fn has_met(&self, name: &str) -> bool {
-        if self.met_table.contains_key(name) {
-            true
-        } else {
-            let mut parent_opt = &self.parent_env;
-            while parent_opt.is_some() {
-                match parent_opt {
-                    Some(parent) => {
-                        if parent.met_table.contains_key(name) {
-                            return true;
-                        }
-                        parent_opt = &parent.parent_env;
-                    }
-                    _ => {}
-                }
-            }
-            false
-        }
+        self.lookup_env(|env| env.met_table.contains_key(name) ).is_some()
     }
 
-    // TODO: make a single lookup
     fn get_var(&self, name: &str) -> &SExp {
-        // self.loc_env.get(name).unwrap()
-        // optimize
-
-        if self.loc_env.contains_key(name) {
-            self.loc_env.get(name).unwrap()
-        } else {
-            let mut parent_opt = &self.parent_env;
-            while parent_opt.is_some() {
-                match parent_opt {
-                    Some(parent) => {
-                        if parent.loc_env.contains_key(name) {
-                            return parent.loc_env.get(name).unwrap();
-                        }
-                        parent_opt = &parent.parent_env;
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Var {name} is not found");
+        match self.lookup_env(|env| env.loc_env.contains_key(name) ) {
+            Some(env) => env.loc_env.get(name).unwrap(),
+            None => panic!("Var {name} is not found")
         }
     }
 
     fn get_args(&self, name: &str) -> Option<&SExp> {
-        if self.arg_table.contains_key(name) {
-            self.arg_table.get(name)
-        } else {
-            let mut parent_opt = &self.parent_env;
-            while parent_opt.is_some() {
-                match parent_opt {
-                    Some(parent) => {
-                        if parent.arg_table.contains_key(name) {
-                            return parent.arg_table.get(name);
-                        }
-                        parent_opt = &parent.parent_env;
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Arg data for method {name} is not found");
+        match self.lookup_env(|env| env.arg_table.contains_key(name) ) {
+            Some(env) => env.arg_table.get(name),
+            None => panic!("Arg data for method {name} is not found")
         }
     }
 
     fn get_met(&self, name: &str) -> &SExp {
-        if self.met_table.contains_key(name) {
-            self.met_table.get(name).unwrap()
-        } else {
-            let mut parent_opt = &self.parent_env;
-            while parent_opt.is_some() {
-                match parent_opt {
-                    Some(parent) => {
-                        if parent.met_table.contains_key(name) {
-                            return parent.met_table.get(name).unwrap();
-                        }
-                        parent_opt = &parent.parent_env;
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Method {name} is not found");
+        match self.lookup_env(|env| env.met_table.contains_key(name) ) {
+            Some(env) => env.met_table.get(name).unwrap(),
+            None => panic!("Method {name} is not found")
         }
     }
 }

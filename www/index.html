@@ -2,27 +2,18 @@
 <html>
   <head>
     <meta  charset="utf-8">
-    <title>Simple template</title>
+    <title>Jop lang!</title>
   </head>
   <body>
     <script src="jopwas.js"></script>
 
     <script>
-      // Like with the `--target web` output the exports are immediately
-      // available but they won't work until we initialize the module. Unlike
-      // `--target web`, however, the globals are all stored on a
-      // `wasm_bindgen` global. The global itself is the initialization
-      // function and then the properties of the global are all the exported
-      // functions.
-      //
-      // Note that the name `wasm_bindgen` can be configured with the
-      // `--no-modules-global` CLI flag
-      const { greet } = wasm_bindgen;
-      const { eval_test } = wasm_bindgen;
+      const { eval_jop } = wasm_bindgen;
 
       async function run() {
         await wasm_bindgen();
-        eval_test();
+        let result = eval_jop('(cons "Hello" "user!")');
+        console.log(result);
       }
       run();
     </script>

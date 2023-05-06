@@ -15,16 +15,10 @@ extern {
     fn log(s: &str);
 }
 
-//
-// #[wasm_bindgen]
-// pub fn make_env() -> EvalEnvironment {
-//
-// }
-//
 #[wasm_bindgen]
-pub fn eval_test() {
+pub fn eval_jop(content: &str) -> String {
     let mut env = EvalEnvironment::new();
-    let content = r#"(concat "Hello")"#;
+    // let content = r#"(concat "Hello")"#;
     let chars = content.chars().into_iter().collect::<Vec<_>>();
     let mut lexer = Lexer::new(chars);
     let tokens = match lexer.parse().context("Tokenization error") {
@@ -40,13 +34,16 @@ pub fn eval_test() {
 
     debug_log!("Expressions:");
     let mut loc_env: LocalEnv = LocalEnv::new();
+    let mut results: Vec<String> = Vec::new();
     for expr in parser.expressions_iterator() {
         debug_log!("\n-> {expr}\n");
         let result = env.eval_expr(expr, &mut loc_env);
         println!("{res}", res = result.as_string());
         debug_log!("ENV: {loc_env:?}");
         log(result.as_string().as_str());
+        results.push(result.as_string());
     }
+    return results.join("\n");
 }
 
 #[wasm_bindgen]

@@ -538,7 +538,7 @@ impl Parser {
 }
 
 
-type EnvTable = HashMap<String, SExp>;
+type EnvTable = HashMap<SExp, SExp>;
 type LamTable = HashMap<SExp, SExp>;
 #[derive(Debug)]
 pub struct LocalEnv<'a> {
@@ -594,29 +594,29 @@ impl<'a> LocalEnv<'a> {
         None
     }
 
-    fn has_var(&self, name: &str) -> bool {
+    fn has_var(&self, name: &SExp) -> bool {
         self.lookup_env(|env| env.loc_env.contains_key(name) ).is_some()
     }
 
-    fn has_met(&self, name: &str) -> bool {
+    fn has_met(&self, name: &SExp) -> bool {
         self.lookup_env(|env| env.met_table.contains_key(name) ).is_some()
     }
 
-    fn get_var(&self, name: &str) -> &SExp {
+    fn get_var(&self, name: &SExp) -> &SExp {
         match self.lookup_env(|env| env.loc_env.contains_key(name) ) {
             Some(env) => env.loc_env.get(name).unwrap(),
             None => panic!("Var {name} is not found")
         }
     }
 
-    fn get_args(&self, name: &str) -> Option<&SExp> {
+    fn get_args(&self, name: &SExp) -> Option<&SExp> {
         match self.lookup_env(|env| env.arg_table.contains_key(name) ) {
             Some(env) => env.arg_table.get(name),
             None => panic!("Arg data for method {name} is not found")
         }
     }
 
-    fn get_met(&self, name: &str) -> &SExp {
+    fn get_met(&self, name: &SExp) -> &SExp {
         match self.lookup_env(|env| env.met_table.contains_key(name) ) {
             Some(env) => env.met_table.get(name).unwrap(),
             None => panic!("Method {name} is not found")
@@ -643,7 +643,7 @@ impl EvalEnvironment {
                     for e in capt.get_list_vec().iter() {
                         loc_env
                             .loc_env
-                            .insert(e.get_car().get_id(), e.get_cdr().clone());
+                            .insert(e.get_car().clone(), e.get_cdr().clone());
                     }
 
                 }
@@ -661,7 +661,7 @@ impl EvalEnvironment {
                                 arg_name = arg_name.get_id(),
                                 val = arg_val
                             );
-                            loc_env.loc_env.insert(arg_name.get_id(), arg_val.clone());
+                            loc_env.loc_env.insert(arg_name, arg_val.clone());
                             rhs_ptr = rhs_ptr.get_cdr();
                         }
                         None if rhs_ptr.is_nil() => {
@@ -1084,22 +1084,22 @@ impl EvalEnvironment {
             "define" => match expr {
                 SExp::Cons { car, cdr } if car.is_id() => {
                     let var = self.eval_expr(cdr.get_car(), loc_env);
-                    loc_env.loc_env.insert(car.get_id(), var);
+                    loc_env.loc_env.insert(car.as_ref().clone(), var);
                     return SExp::Nil;
                 }
                 SExp::Cons { car, cdr } if car.is_list() => {
                     let (name, args) = car.get_list_pair();
-                    loc_env.arg_table.insert(name.get_id(), args.clone());
+                    loc_env.arg_table.insert(name.clone(), args.clone());
                     let body = cdr.get_car();
-                    loc_env.met_table.insert(name.get_id(), body.clone());
+                    loc_env.met_table.insert(name.clone(), body.clone());
                     return SExp::Nil;
                 }
                 _ => {
                     panic!("ERROR: invalid define {expr:?}");
                 }
             },
-            var if loc_env.has_var(var) => {
-                let val = loc_env.get_var(var).clone();
+            var if loc_env.has_var(id) => {
+                let val = loc_env.get_var(id).clone();
                 debug_log!("glob var: {var} -> {val}");
                 // Eval lambda only when it has call arguments
                 if val.is_list() && val.get_car().is_lambda() && !expr.is_nil() {
@@ -1107,8 +1107,8 @@ impl EvalEnvironment {
                 }
                 return val;
             }
-            met if loc_env.has_met(met) => {
-                let func = loc_env.get_met(met).clone();
+            met if loc_env.has_met(id) => {
+                let func = loc_env.get_met(id).clone();
                 let mut new_loc_env = LocalEnv {
                     loc_env: EnvTable::new(),
                     lam_env: LamTable::new(),
@@ -1119,7 +1119,7 @@ impl EvalEnvironment {
 
                 // TODO: detect cyclic references
                 // TODO: top level lambda bubleup its arg, fix
-                if let Some(args) = loc_env.get_args(met) {
+                if let Some(args) = loc_env.get_args(id) {
                     debug_log!("args: {args}");
                     let args_exprs = args.get_list_vec(); // should be all ids
                     let mut args_iter = args_exprs.into_iter();
@@ -1148,7 +1148,7 @@ impl EvalEnvironment {
                                         );
                                     }
                                 } else {
-                                    new_loc_env.loc_env.insert(arg_name.get_id(), arg_val);
+                                    new_loc_env.loc_env.insert(arg_name, arg_val);
                                 }
                                 expr_p = expr_p.get_cdr();
                             }

@@ -71,3 +71,11 @@
 (define odd? (lambda (el) (not (= (% el 2) 0))))
 
 (filter odd? nums)
+
+
+(define (avg lst)
+  (/
+    (reduce (lambda (el acc) (+ el acc)) lst 0)
+    (length lst)))
+
+(avg nums)

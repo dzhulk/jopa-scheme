@@ -59,7 +59,8 @@ impl Lexer {
                 break;
             }
         }
-        return result.iter().collect();
+        let s: String = result.iter().collect();
+        return String::from(s.trim());
     }
 
     pub fn parse(&mut self) -> Result<Vec<Token>> {

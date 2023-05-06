@@ -615,7 +615,8 @@ impl<'a> LocalEnv<'a> {
 }
 
 #[derive(Debug)]
-pub struct EvalEnvironment {}
+pub struct EvalEnvironment {
+}
 
 impl EvalEnvironment {
     pub fn new() -> Self {
@@ -1010,7 +1011,6 @@ impl EvalEnvironment {
                         let first = self.eval_expr(car, loc_env);
                         // we know there are only two args, so seconds
                         // only should have car
-                        println!("{expr}");
                         let second = self.eval_expr(cdr.get_car(), loc_env);
                         if second.is_list() || second.is_nil() {
                             return second.prepend_to_list(first);

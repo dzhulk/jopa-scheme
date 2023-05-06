@@ -61,4 +61,9 @@
 ;; calculate list product
 (reduce (lambda (el acc) (* el acc)) (list 1 2 4 6  8 10) 1)
 
+;; hof test
+(define (even? el) (= (% el 2) 0))
 
+(filter
+    even?
+    (list 1 2 3 4 5 6 7 8 9 10))

@@ -24,3 +24,46 @@
            (fib (- n 2)))))
 
 (fib 20)
+
+
+(define (map-in fn lst acc)
+  (if (nil? lst)
+    acc
+    (map-in fn
+            (cdr lst)
+            (conj (fn (car lst)) acc))))
+
+
+(define (map fn lst) (map-in fn lst nil))
+
+(define (filteraux pred coll acc)
+  (if (nil? coll)
+    acc
+    (if (pred (car coll))
+      (filteraux pred (cdr coll) (conj (car coll) acc))
+      (filteraux pred (cdr coll) acc))))
+
+(define (filter pred coll) (filteraux pred coll nil))
+
+;; select even elements
+(define even
+  (filter
+    (lambda (el) (= (% el 2) 0))
+    (list 1 2 3 4 5 6 7 8 9 10)))
+
+(println even)
+
+(define (reduce fn coll init)
+  (if (nil? coll)
+    init
+    (reduce fn (cdr coll) (fn (car coll) init))))
+
+;; calculate list product
+(reduce (lambda (el acc) (* el acc)) (list 1 2 4 6  8 10) 1)
+
+;; hof test
+(define (even? el) (= (% el 2) 0))
+
+(filter
+    even?
+    (list 1 2 3 4 5 6 7 8 9 10))

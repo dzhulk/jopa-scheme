@@ -1,0 +1,21 @@
+<!DOCTYPE  html>
+<html>
+  <head>
+    <meta  charset="utf-8">
+    <title>Jop lang!</title>
+  </head>
+  <body>
+    <script src="jopwas.js"></script>
+
+    <script>
+      const { eval_jop } = wasm_bindgen;
+
+      async function run() {
+        await wasm_bindgen();
+        let result = eval_jop('(cons "Hello" "user!")');
+        console.log(result);
+      }
+      run();
+    </script>
+  </body>
+</html>

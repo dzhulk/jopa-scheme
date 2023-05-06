@@ -3,21 +3,23 @@ name = "byol"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-# Some dump comment
-
-[dependencies]
-rustyline = { version="11.0.0" }
-anyhow = { version = "1.0" }
-
 [lib]
-name = "jop"           # The name of the target.
+name = "byol"           # The name of the target.
 path = "src/lib.rs"    # The source file of the target.
 
-[[bin]]
-name = "repl"
-path = "src/bin/repl.rs"
+# [[bin]]
+# name = "repl"
+# path = "src/bin/repl.rs"
+#
+# [[bin]]
+# name = "jopc"
+# path = "src/bin/jopc.rs"
 
-[[bin]]
-name = "jopc"
-path = "src/bin/jopc.rs"
+[workspace]
+
+members = [
+    "jop",
+    "repl",
+    "jopc",
+    "jopwas"
+]

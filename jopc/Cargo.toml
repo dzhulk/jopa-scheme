@@ -1,0 +1,10 @@
+[package]
+name = "jopc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { version = "1.0" }
+jop = { version = "0.1", path = "../jop" }   # <-- explicitly depend on the library

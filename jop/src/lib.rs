@@ -293,8 +293,7 @@ impl SExp {
             }
             Self::Nil => Self::new_list(other),
             _ => {
-                eprintln!("ERROR: append expected list type");
-                todo!();
+                panic!("ERROR: append expected list type but got {self:?}");
             }
         }
     }
@@ -359,13 +358,7 @@ impl SExp {
             Self::Cmp(cmp) => {
                 format!("{}", cmp)
             }
-            Self::Bool(b) => {
-                if *b {
-                    String::from("true")
-                } else {
-                    String::from("false")
-                }
-            }
+            Self::Bool(b) => b.to_string(),
             lst if lst.is_list() => {
                 return String::from("(")
                     + lst
@@ -419,13 +412,7 @@ impl Display for SExp {
             Self::Cmp(cmp) => {
                 format!("{}", cmp)
             }
-            Self::Bool(b) => {
-                if *b {
-                    String::from("true")
-                } else {
-                    String::from("false")
-                }
-            }
+            Self::Bool(b) => b.to_string(),
             lst if lst.is_list() => {
                 String::from("(")
                     + lst

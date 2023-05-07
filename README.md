@@ -1,4 +1,4 @@
-## Simple scheme like lang
+## Simple scheme like lang interpreter
 
 How to run:
 ```bash

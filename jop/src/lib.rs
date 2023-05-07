@@ -813,7 +813,7 @@ impl EvalEnvironment {
                 let new_acc = match self.eval_expr(expr.get_car(), loc_env) {
                     SExp::Num(lhs) => {
                         acc.map(|v| {
-                            if (v.is_fnum()) {
+                            if v.is_fnum() {
                                 SExp::FNum(F64::new(op.do_fmat(v.get_fnum(), lhs as f64)))
                             } else {
                                 SExp::Num(op.do_mat(v.get_num(), lhs))

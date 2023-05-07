@@ -1,8 +1,9 @@
 use jop::*;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Result};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use std::fs;
 
 fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
@@ -12,6 +13,9 @@ fn main() -> Result<()> {
 
     let mut env = EvalEnvironment::new();
     let mut loc_env: LocalEnv = LocalEnv::new();
+
+    let stdlib_src = fs::read_to_string("examples/stdlib.scm").expect("Cant read stdlib");
+    execute_source(&mut env, &mut loc_env, stdlib_src, |_| {}).unwrap();
 
     loop {
         let readline = rl.readline("jop=> ");

@@ -1,12 +1,3 @@
-(define (append list1 list2)
-        (if (nil? list1) list2
-            (cons (car list1) (append (cdr list1) list2))))
-
-(define (reverse l)
-  (if (nil? l)
-    nil
-    (append (reverse (cdr l)) (list (car l)))))
-
 (define (map fn lst)
   (do
     (define (mapaux-tc fn lst acc)
@@ -16,7 +7,7 @@
 
 (define (reduce fn coll init)
   (do
-    (define (reduce-tc)
+    (define (reduce-tc fn coll init)
       (if (nil? coll)
         init
         (reduce-tc fn (cdr coll) (fn (car coll) init))))
@@ -43,7 +34,6 @@
 (define (max lst)
    (reduce (lambda (el m) (if (> el m) el m)) (cdr lst) (car lst)))
 
-
 (define (range from to)
   (do
     (define (rangeaux-tc i acc)
@@ -51,3 +41,17 @@
         acc
         (rangeaux-tc (+ i 1) (conj i acc))))
      (rangeaux-tc from nil)))
+
+
+(define (reverse l)
+  (reduce (lambda (el acc) (cons el acc)) l nil))
+
+
+(define (append a b)
+  (do
+    (define reversed (reverse a))
+    (define (append-tc rev acc)
+      (if (nil? rev)
+        acc
+        (append-tc (cdr rev) (cons (car rev) acc) )))
+    (append-tc reversed b)))

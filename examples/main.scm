@@ -50,13 +50,5 @@
 
 (min nums)
 
-(define (range from to)
-  (do
-    (define (rangeaux-tc i acc)
-      (if (= i to)
-        acc
-        (rangeaux-tc (+ i 1) (cons i acc))))
-    (reverse (rangeaux-tc from nil))))
-
 (range 0 100)
 

@@ -5,9 +5,49 @@ use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
+use std::hash::{Hasher, Hash};
 
 const SKIP_SYMS: [char; 5] = ['\n', '\r', ' ', '\t', '#'];
 const OPS: [char; 8] = ['+', '-', '=', '*', '/', '%', '>', '<'];
+
+#[derive(Debug, Clone)]
+pub struct F64 {
+    value: f64,
+}
+
+impl F64 {
+    fn new(value: f64) -> Self {
+        return Self { value: value }
+    }
+
+    fn from_int(value: i64) -> Self {
+        Self::new(value as f64)
+    }
+}
+
+// from https://docs.rs/eq-float/0.1.0/src/eq_float/lib.rs.html
+impl Hash for F64 {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        if self.value.is_nan() {
+            0x7fc00000u32.hash(hasher); // a particular bit representation for NAN
+        } else if self.value == 0.0 { // catches both positive and negative zero
+            0u32.hash(hasher);
+        } else {
+            self.value.to_bits().hash(hasher);
+        }
+    }
+}
+impl PartialEq for F64 {
+    fn eq(&self, other: &Self) -> bool {
+        if self.value.is_nan() && other.value.is_nan() {
+            true
+        } else {
+            self.value == other.value
+        }
+    }
+}
+
+impl Eq for F64 {}
 
 #[macro_export]
 macro_rules! debug_log {
@@ -81,7 +121,7 @@ impl Lexer {
                     tokens.push(Token::Sym(token))
                 }
                 s if s.is_numeric() => {
-                    let token = self.chop_while(|c| c.is_numeric());
+                    let token = self.chop_while(|c| c.is_numeric() || *c == '.');
                     tokens.push(Token::Num(token));
                 }
                 s if SKIP_SYMS.contains(&s) => {
@@ -131,6 +171,16 @@ impl EvMat {
     }
 
     fn do_mat(&self, lhs: i64, rhs: i64) -> i64 {
+        match self {
+            Self::Add => lhs + rhs,
+            Self::Sub => lhs - rhs,
+            Self::Mul => lhs * rhs,
+            Self::Div => lhs / rhs,
+            Self::Mod => lhs % rhs,
+        }
+    }
+
+    fn do_fmat(&self, lhs: f64, rhs: f64) -> f64 {
         match self {
             Self::Add => lhs + rhs,
             Self::Sub => lhs - rhs,
@@ -210,6 +260,7 @@ pub enum SExp {
     Cmp(EvCmp),
     Sym(String),
     Num(i64),
+    FNum(F64),
     Bool(bool),
     Cons { car: Box<SExp>, cdr: Box<SExp> },
     Nil,
@@ -263,6 +314,39 @@ impl SExp {
             Self::Id(id) => String::from(id),
             _ => {
                 panic!("ERROR: cant't get id from {self:?}");
+            }
+        }
+    }
+
+    fn is_num(&self) -> bool {
+        match self {
+            Self::Num(_) => true,
+            _ => false,
+        }
+    }
+
+    fn is_fnum(&self) -> bool {
+        match self {
+            Self::FNum(_) => true,
+            _ => false,
+        }
+    }
+
+    fn get_num(&self) -> i64 {
+        match self {
+            Self::Num(num) => *num,
+            _ => {
+                panic!("ERROR: cant't get num from {self:?}");
+            }
+        }
+    }
+
+    fn get_fnum(&self) -> f64 {
+        match self {
+            Self::FNum(num) => num.value,
+            Self::Num(num) => *num as f64,
+            _ => {
+                panic!("ERROR: cant't get fnum from {self:?}");
             }
         }
     }
@@ -351,6 +435,7 @@ impl SExp {
             Self::Id(id) => id.to_string(),
             Self::Lambda(_) => "lambda".to_string(),
             Self::Num(num) => num.to_string(),
+            Self::FNum(num) => num.value.to_string(),
             Self::Sym(str) => str.clone(),
             Self::Nil => String::from("()"),
             Self::Op(op) => {
@@ -405,6 +490,7 @@ impl Display for SExp {
             Self::Id(id) => id.to_string(),
             Self::Lambda(_) => "lambda".to_string(),
             Self::Num(num) => num.to_string(),
+            Self::FNum(num) => num.value.to_string(),
             Self::Sym(str) => format!("'{}'", str),
             Self::Nil => String::from("()"),
             Self::Op(op) => {
@@ -525,7 +611,13 @@ impl Parser {
                     SExp::Cmp(cmp)
                 }
             },
-            Token::Num(str) => SExp::Num(String::from(str).parse::<i64>().unwrap()),
+            Token::Num(str) => {
+                if str.contains(".") {
+                    SExp::FNum(F64::new(String::from(str).parse::<f64>().unwrap()))
+                } else {
+                    SExp::Num(String::from(str).parse::<i64>().unwrap())
+                }
+            },
             any => {
                 panic!("ERROR: Unknown token: {any:?}");
             }
@@ -682,6 +774,7 @@ impl EvalEnvironment {
                 SExp::Op(s) => self.eval_mat(s, cdr, None, loc_env),
                 SExp::Cmp(s) => self.eval_cmp(s, cdr, None, loc_env),
                 SExp::Num(num) => SExp::Num(*num),
+                SExp::FNum(num) => SExp::FNum(num.clone()),
                 SExp::Sym(sym) => SExp::Sym(sym.to_string()),
                 SExp::Bool(b) => SExp::Bool(*b),
                 SExp::Lambda(_) => { expr.clone() } // don't remember why
@@ -695,6 +788,7 @@ impl EvalEnvironment {
             },
             SExp::Id(_) => self.eval_func(expr, &SExp::Nil, None, loc_env),
             SExp::Num(num) => SExp::Num(*num),
+            SExp::FNum(num) => SExp::FNum(num.clone()),
             SExp::Sym(sym) => SExp::Sym(sym.to_string()),
             SExp::Bool(b) => SExp::Bool(*b),
             SExp::Nil => SExp::Nil,
@@ -708,14 +802,29 @@ impl EvalEnvironment {
         &mut self,
         op: &EvMat,
         expr: &SExp,
-        acc: Option<i64>,
+        acc: Option<SExp>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
         match expr {
-            SExp::Nil => SExp::Num(acc.unwrap()),
+            SExp::Nil => acc.unwrap(),
             _ => {
-                let SExp::Num(lhs) = self.eval_expr(expr.get_car(), loc_env) else { panic!("Math on not Num type!") };
-                let new_acc = acc.map(|v| op.do_mat(v, lhs)).or(Some(lhs));
+                let new_acc = match self.eval_expr(expr.get_car(), loc_env) {
+                    SExp::Num(lhs) => {
+                        acc.map(|v| {
+                            if (v.is_fnum()) {
+                                SExp::FNum(F64::new(op.do_fmat(v.get_fnum(), lhs as f64)))
+                            } else {
+                                SExp::Num(op.do_mat(v.get_num(), lhs))
+                            }
+                        }).or(Some(SExp::Num(lhs)))
+                    },
+                    SExp::FNum(lhs) => {
+                        acc.map(|v| SExp::FNum(F64::new(op.do_fmat(v.get_fnum(), lhs.value)))).or(Some(SExp::FNum(lhs)))
+                    },
+                    _ => {
+                        panic!("Math on not numeric type {expr:?}");
+                    }
+                };
                 self.eval_mat(op, expr.get_cdr(), new_acc, loc_env)
             }
         }

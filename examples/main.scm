@@ -46,7 +46,7 @@
 
 (define (avg lst)
   (/
-    (reduce (lambda (el acc) (+ el acc)) lst 0)
+    (reduce (lambda (el acc) (+ el acc)) lst 0.0)
     (length lst)))
 
 (avg nums)

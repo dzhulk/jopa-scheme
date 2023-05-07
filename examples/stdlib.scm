@@ -28,3 +28,14 @@
           (filteraux pred (cdr coll) (conj (car coll) acc))
           (filteraux pred (cdr coll) acc))))
     (filteraux pred coll nil)))
+
+(define (avg lst)
+  (/
+    (reduce (lambda (el acc) (+ el acc)) lst 0.0)
+    (length lst)))
+
+(define (min lst)
+   (reduce (lambda (el m) (if (< el m) el m)) (cdr lst) (car lst)))
+
+(define (max lst)
+   (reduce (lambda (el m) (if (> el m) el m)) (cdr lst) (car lst)))

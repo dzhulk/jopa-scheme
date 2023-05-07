@@ -465,6 +465,9 @@ impl SExp {
     fn cmp(&self, other: &SExp, cmp_op: &EvCmp) -> bool {
         match (self, other) {
             (Self::Num(lhs), Self::Num(rhs)) => cmp_op.do_cmp(lhs, rhs),
+            (Self::FNum(lhs), Self::Num(rhs)) => cmp_op.do_cmp(lhs.value, *rhs as f64),
+            (Self::Num(lhs), Self::FNum(rhs)) => cmp_op.do_cmp(*lhs as f64, rhs.value),
+            (Self::FNum(lhs), Self::FNum(rhs)) => cmp_op.do_cmp(lhs.value, rhs.value),
             (Self::Sym(lhs), Self::Sym(rhs)) => cmp_op.do_cmp(lhs, rhs),
             _ => {
                 eprintln!("ERROR: not comparable types: {self:?} and {other:?}");

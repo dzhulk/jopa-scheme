@@ -44,9 +44,8 @@
 
 (filter odd? nums)
 
-(define (avg lst)
-  (/
-    (reduce (lambda (el acc) (+ el acc)) lst 0.0)
-    (length lst)))
-
 (avg nums)
+
+(max nums)
+
+(min nums)

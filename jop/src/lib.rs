@@ -642,6 +642,7 @@ pub struct LocalEnv<'a> {
     lam_env: LamTable,
     met_table: EnvTable,
     parent_env: Option<Rc<&'a LocalEnv<'a>>>,
+    tail_call: bool,
 }
 
 impl<'a> LocalEnv<'a> {
@@ -651,16 +652,14 @@ impl<'a> LocalEnv<'a> {
             lam_env: LamTable::new(),
             met_table: EnvTable::new(),
             parent_env: None,
+            tail_call: false,
         };
     }
 
-    fn create_child(&'a self) -> Self {
-        return LocalEnv {
-            loc_env: EnvTable::new(),
-            lam_env: LamTable::new(),
-            met_table: EnvTable::new(),
-            parent_env: Some(Rc::new(&self)),
-        };
+    fn merge(&mut self, other: LocalEnv) {
+        self.loc_env.extend(other.loc_env);
+        self.lam_env.extend(other.lam_env);
+        self.met_table.extend(other.met_table);
     }
 
     fn set_parent(&mut self, parent: &'a Self) {
@@ -1212,13 +1211,7 @@ impl EvalEnvironment {
             met if loc_env.has_met(id) => {
                 let met_func_args = loc_env.get_met(id).clone();
                 let (func, args) = met_func_args.get_list_pair();
-
-                let mut new_loc_env = LocalEnv {
-                    loc_env: EnvTable::new(),
-                    lam_env: LamTable::new(),
-                    met_table: EnvTable::new(),
-                    parent_env: None,
-                };
+                let mut new_loc_env = LocalEnv::new();
 
                 // TODO: detect cyclic references
                 // TODO: top level lambda bubleup its arg, fix
@@ -1277,12 +1270,36 @@ impl EvalEnvironment {
                 if func.get_car().is_lambda() {
                     debug_log!("new loc_env: {new_loc_env:?}");
                 }
-                new_loc_env.set_parent(&loc_env);
-                return self.eval_expr(&func, &mut new_loc_env);
+
+                if met.ends_with("-tc") {
+                    if loc_env.tail_call {
+                        loc_env.merge(new_loc_env);
+                        return id.clone();
+                    } else {
+                        // todo: detect tail call implicitly
+                        // println!("func: {func:#?}");
+                        new_loc_env.tail_call = true;
+                        new_loc_env.set_parent(&loc_env);
+                        return self.eval_tailcall(id, &func, &mut new_loc_env);
+                    };
+                } else {
+                    new_loc_env.set_parent(&loc_env);
+                    return self.eval_expr(&func, &mut new_loc_env);
+                }
+
             }
             _ => {
                 panic!("Unknown {id:?}");
             }
+        };
+    }
+
+    fn eval_tailcall(&mut self, id: &SExp, body: &SExp, loc_env: &mut LocalEnv) -> SExp {
+        loop {
+            match self.eval_expr(body, loc_env) {
+                rec_call if rec_call == *id => {},
+                result => { return result },
+            };
         };
     }
 }

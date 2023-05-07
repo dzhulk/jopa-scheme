@@ -9,25 +9,28 @@
 
 (define (map fn lst)
   (do
-    (define (mapaux fn lst acc)
+    (define (mapaux-tc fn lst acc)
       (if (nil? lst) acc
-        (mapaux fn (cdr lst) (conj (fn (car lst)) acc))))
-      (mapaux fn lst nil)))
+        (mapaux-tc fn (cdr lst) (conj (fn (car lst)) acc))))
+      (mapaux-tc fn lst nil)))
 
 (define (reduce fn coll init)
-  (if (nil? coll)
-    init
-    (reduce fn (cdr coll) (fn (car coll) init))))
+  (do
+    (define (reduce-tc)
+      (if (nil? coll)
+        init
+        (reduce-tc fn (cdr coll) (fn (car coll) init))))
+    (reduce-tc fn coll init)))
 
 (define (filter pred coll)
   (do
-    (define (filteraux pred coll acc)
+    (define (filteraux-tc pred coll acc)
       (if (nil? coll)
         acc
         (if (pred (car coll))
-          (filteraux pred (cdr coll) (conj (car coll) acc))
-          (filteraux pred (cdr coll) acc))))
-    (filteraux pred coll nil)))
+          (filteraux-tc pred (cdr coll) (conj (car coll) acc))
+          (filteraux-tc pred (cdr coll) acc))))
+    (filteraux-tc pred coll nil)))
 
 (define (avg lst)
   (/
@@ -39,3 +42,12 @@
 
 (define (max lst)
    (reduce (lambda (el m) (if (> el m) el m)) (cdr lst) (car lst)))
+
+
+(define (range from to)
+  (do
+    (define (rangeaux-tc i acc)
+      (if (= i to)
+        acc
+        (rangeaux-tc (+ i 1) (conj i acc))))
+     (rangeaux-tc from nil)))

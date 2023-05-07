@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Result, bail};
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -130,7 +130,7 @@ impl EvMat {
         }
     }
 
-    fn do_mat(&self, lhs: i32, rhs: i32) -> i32 {
+    fn do_mat(&self, lhs: i64, rhs: i64) -> i64 {
         match self {
             Self::Add => lhs + rhs,
             Self::Sub => lhs - rhs,
@@ -209,7 +209,7 @@ pub enum SExp {
     Op(EvMat),
     Cmp(EvCmp),
     Sym(String),
-    Num(i32),
+    Num(i64),
     Bool(bool),
     Cons { car: Box<SExp>, cdr: Box<SExp> },
     Nil,
@@ -525,7 +525,7 @@ impl Parser {
                     SExp::Cmp(cmp)
                 }
             },
-            Token::Num(str) => SExp::Num(String::from(str).parse::<i32>().unwrap()),
+            Token::Num(str) => SExp::Num(String::from(str).parse::<i64>().unwrap()),
             any => {
                 panic!("ERROR: Unknown token: {any:?}");
             }
@@ -708,7 +708,7 @@ impl EvalEnvironment {
         &mut self,
         op: &EvMat,
         expr: &SExp,
-        acc: Option<i32>,
+        acc: Option<i64>,
         loc_env: &mut LocalEnv,
     ) -> SExp {
         match expr {
@@ -944,7 +944,7 @@ impl EvalEnvironment {
                             lhs = self.eval_expr(&lhs, loc_env);
                         }
                         if lhs.is_list() || lhs.is_nil() {
-                            return SExp::Num(lhs.get_list_vec().len() as i32);
+                            return SExp::Num(lhs.get_list_vec().len() as i64);
                         } else {
                             panic!("LENGTH works only on lists {expr:?}");
                         }
@@ -1173,4 +1173,26 @@ impl EvalEnvironment {
             }
         };
     }
+}
+
+pub fn execute_source(env: &mut EvalEnvironment, loc_env: &mut LocalEnv, content: String, f: impl Fn(SExp) -> () ) -> Result<()> {
+    let chars = content.chars().into_iter().collect::<Vec<_>>();
+    let mut lexer = Lexer::new(chars);
+    let tokens = match lexer.parse().context("Tokenization error") {
+        Ok(t) => t,
+        err => bail!("Tokenization failed: {err:?}"),
+    };
+    let mut parser = Parser::new(tokens);
+    match parser.parse_tokens() {
+        Ok(t) => t,
+        err => bail!("AST parsing failed: {err:?}"),
+    }
+
+    for expr in parser.expressions_iterator() {
+        debug_log!("\n-> {expr}\n");
+        f(env.eval_expr(expr, loc_env));
+        debug_log!("ENV: {loc_env:?}");
+    }
+
+    Ok(())
 }

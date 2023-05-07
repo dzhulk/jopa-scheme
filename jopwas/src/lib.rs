@@ -14,34 +14,21 @@ extern {
     fn log(s: &str);
 }
 
+use std::cell::RefCell;
+
 #[wasm_bindgen]
 pub fn eval_jop(content: &str) -> String {
     let mut env = EvalEnvironment::new();
-    // let content = r#"(concat "Hello")"#;
-    let chars = content.chars().into_iter().collect::<Vec<_>>();
-    let mut lexer = Lexer::new(chars);
-    let tokens = match lexer.parse().context("Tokenization error") {
-        Ok(t) => t,
-        err => panic!("Tokenization failed: {err:?}"),
-    };
-
-    let mut parser = Parser::new(tokens);
-    match parser.parse_tokens() {
-        Ok(t) => t,
-        err => panic!("AST parsing failed: {err:?}"),
-    }
-
-    debug_log!("Expressions:");
     let mut loc_env: LocalEnv = LocalEnv::new();
-    let mut results: Vec<String> = Vec::new();
-    for expr in parser.expressions_iterator() {
-        debug_log!("\n-> {expr}\n");
-        let result = env.eval_expr(expr, &mut loc_env);
-        println!("{res}", res = result.as_string());
-        debug_log!("ENV: {loc_env:?}");
+    let results: RefCell<Vec<String>> = RefCell::new(Vec::new());
+
+    execute_source(&mut env, &mut loc_env, content.to_string(), |result| {
         log(result.as_string().as_str());
-        results.push(result.as_string());
-    }
-    return results.join("\n");
+        let mut bw = results.borrow_mut();
+        bw.push(result.as_string());
+    }).unwrap();
+
+    let bw = results.borrow();
+    return bw.join("\n")
 }
 

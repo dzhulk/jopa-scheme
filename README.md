@@ -40,14 +40,13 @@ list   - construct new list (list 1 2 3)
 ## Some examples
 map:
 ```scheme
-(define (map-in fn lst acc)
-  (if (nil? lst)
-    acc
-    (map-in fn
-            (cdr lst)
-            (conj (fn (car lst)) acc))))
+(define (map fn lst)
+  (do
+    (define (mapaux fn lst acc)
+      (if (nil? lst) acc
+        (mapaux fn (cdr lst) (conj (fn (car lst)) acc))))
+      (mapaux fn lst nil)))
 
-(define (map fn lst) (map-in fn lst nil))
 
 (map (lambda (x) (* x x)) (list 2 3 4 5 6))
 ```
@@ -81,18 +80,36 @@ Fibonacci:
            (fib (- n 2)))))
 
 (fib 20)
+
+;; faster version
+
+(define (fastfib n)
+  (do
+    (define (fibaux n acc)
+      (if (= (length acc) n)
+        acc
+        (fibaux
+          n
+          (cons (+
+                  (car acc)
+                  (car (cdr acc)))
+                acc))))
+      (reverse (fibaux n (list 1 0)))))
+
+(fastfib 50)
 ```
 
 Filter & reduce:
 ```scheme
-(define (filteraux pred coll acc)
-  (if (nil? coll)
-    acc
-    (if (pred (car coll))
-      (filteraux pred (cdr coll) (conj (car coll) acc))
-      (filteraux pred (cdr coll) acc))))
-
-(define (filter pred coll) (filteraux pred coll nil))
+(define (filter pred coll)
+  (do
+    (define (filteraux pred coll acc)
+      (if (nil? coll)
+        acc
+        (if (pred (car coll))
+          (filteraux pred (cdr coll) (conj (car coll) acc))
+          (filteraux pred (cdr coll) acc))))
+    (filteraux pred coll nil)))
 
 (define nums (list 1 2 3 4 5 6 7 8 9 10))
 

@@ -14,8 +14,6 @@
     (fizzbuzzaux (+ n 1) 1 nil))
 
 
-(println (fizzbuzz 100))
-
 (define (fib n)
     (if (<= n 2)
         1
@@ -23,26 +21,6 @@
            (fib (- n 2)))))
 
 (fib 20)
-
-
-(define (map-in fn lst acc)
-  (if (nil? lst)
-    acc
-    (map-in fn
-            (cdr lst)
-            (conj (fn (car lst)) acc))))
-
-
-(define (map fn lst) (map-in fn lst nil))
-
-(define (filteraux pred coll acc)
-  (if (nil? coll)
-    acc
-    (if (pred (car coll))
-      (filteraux pred (cdr coll) (conj (car coll) acc))
-      (filteraux pred (cdr coll) acc))))
-
-(define (filter pred coll) (filteraux pred coll nil))
 
 (define nums (list 1 2 3 4 5 6 7 8 9 10))
 
@@ -53,11 +31,6 @@
     nums))
 
 (println even)
-
-(define (reduce fn coll init)
-  (if (nil? coll)
-    init
-    (reduce fn (cdr coll) (fn (car coll) init))))
 
 ;; calculate list product
 (reduce (lambda (el acc) (* el acc)) nums 1)
@@ -70,7 +43,6 @@
 (define odd? (lambda (el) (not (even? el))))
 
 (filter odd? nums)
-
 
 (define (avg lst)
   (/
